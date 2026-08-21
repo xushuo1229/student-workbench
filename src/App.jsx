@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useStore } from './store/StoreContext'
 import { Sidebar } from './components/Sidebar'
 import { Topbar } from './components/Topbar'
 import { AuthModal } from './components/AuthModal'
 import { ProfileModal } from './components/ProfileModal'
+import { SettingsModal } from './components/SettingsModal'
 import { Home } from './pages/Home'
 import { TodayPlan } from './pages/TodayPlan'
 import { Courses } from './pages/Courses'
@@ -23,12 +24,31 @@ const PAGES = {
 }
 
 export default function App() {
-  const { activePage } = useStore()
+  const { activePage, data } = useStore()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const Page = PAGES[activePage] || Home
 
+  /* Compute background style from settings */
+  const bgStyle = useMemo(() => {
+    const bg = data.settings?.backgroundImage
+    if (!bg) return undefined
+    if (bg.startsWith('data:') || bg.startsWith('http')) {
+      return {
+        backgroundImage: `url(${bg})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundAttachment: 'fixed',
+      }
+    }
+    // It's a CSS gradient string
+    return {
+      backgroundImage: bg,
+      backgroundAttachment: 'fixed',
+    }
+  }, [data.settings?.backgroundImage])
+
   return (
-    <div className="flex h-screen w-full overflow-hidden">
+    <div className="flex h-screen w-full overflow-hidden" style={bgStyle}>
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar onToggleSidebar={() => setSidebarOpen((v) => !v)} />
@@ -44,6 +64,9 @@ export default function App() {
 
       {/* Profile: edit profile modal (post-login) */}
       <ProfileModal mode="manage" />
+
+      {/* Settings modal */}
+      <SettingsModal />
     </div>
   )
 }

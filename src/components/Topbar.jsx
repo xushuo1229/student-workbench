@@ -1,10 +1,10 @@
-import { Search, Bell, Menu } from 'lucide-react'
+import { Search, Bell, Menu, Settings } from 'lucide-react'
 import { useStore } from '../store/StoreContext'
 import { NAV_ITEMS } from './Sidebar'
 import { Avatar } from './ui/Avatar'
 
 export function Topbar({ onToggleSidebar }) {
-  const { activePage, data, openProfile } = useStore()
+  const { activePage, data, openProfile, openSettings } = useStore()
   const current = NAV_ITEMS.find((n) => n.key === activePage)
   const title = current ? current.label : '首页'
   const sub = [data.user?.grade, data.user?.major].filter(Boolean).join(' · ') || '自律达人'
@@ -40,6 +40,15 @@ export function Topbar({ onToggleSidebar }) {
         <button className="relative shrink-0 rounded-2xl bg-white/80 p-2 text-slate-500 transition hover:bg-slate-100" aria-label="通知">
           <Bell size={18} />
           <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-brand-500" />
+        </button>
+
+        {/* Settings gear */}
+        <button
+          onClick={openSettings}
+          className="shrink-0 rounded-2xl bg-white/80 p-2 text-slate-500 transition hover:bg-slate-100"
+          aria-label="设置"
+        >
+          <Settings size={18} />
         </button>
 
         {/* Avatar / profile trigger */}

@@ -339,6 +339,47 @@ async function main() {
   assert(singleStore.currentUser === 'A', '单字符用户名「A」注册并登录成功')
   assert(JSON.parse(localStorage.getItem(ACC_KEY) || '{}')['A'] !== undefined, '单字符用户名已存入账号簿')
 
+  /* ==================== SETTINGS ==================== */
+  console.log('\n[12] 设置：打开设置面板 + 背景切换')
+  // Find and click settings button (gear icon)
+  const settingsBtn = [...document.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === '设置')
+  // Also check sidebar for "设置" text button
+  const settingsBtnText = [...document.querySelectorAll('button')].find((b) => txt(b) === '设置' && b.getAttribute('aria-label') !== '查看个人资料')
+  const sBtn = settingsBtn || settingsBtnText
+  assert(!!sBtn, '设置按钮存在（侧边栏或顶栏）')
+  if (sBtn) {
+    await click(sBtn)
+    await tick(60)
+    assert(document.body.textContent.includes('设置'), '设置面板已打开')
+    assert(document.body.textContent.includes('界面背景'), '设置含「界面背景」区域')
+    assert(document.body.textContent.includes('预设渐变背景'), '设置含预设渐变选项')
+
+    // Check that initial data has settings object
+    const storeWithSettings = readStore()
+    assert(storeWithSettings.settings !== undefined, '数据中包含 settings 对象')
+    assert(storeWithSettings.settings.backgroundImage === null, '初始背景为 null（默认）')
+
+    // Test selecting a preset gradient (click first preset tile which is "日落暖阳")
+    const presetTiles = [...document.querySelectorAll('button')].filter((b) =>
+      b.title && b.title.includes('日落') || b.title?.includes('海洋') || b.title?.includes('森林')
+    )
+    if (presetTiles.length > 0) {
+      await click(presetTiles[0])
+      await tick(60)
+      const afterPreset = readStore()
+      assert(afterPreset.settings.backgroundImage !== null, '选择预设后 backgroundImage 已设置')
+      assert(typeof afterPreset.settings.backgroundImage === 'string', 'backgroundImage 为字符串（CSS gradient）')
+    }
+
+    // Close settings
+    const closeSettingsX = [...document.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === '关闭' &&
+      b.closest('[class*="fixed"]')) || [...document.querySelectorAll('button')].find((b) => txt(b).includes('关闭'))
+    if (closeSettingsX) {
+      await click(closeSettingsX)
+      await tick(60)
+    }
+  }
+
   /* ==================== RESULT ==================== */
   console.log(`\n==== 结果：通过 ${passed} 项，失败 ${failures.length} 项 ====`)
   if (failures.length) {

@@ -21,6 +21,13 @@ export const initialData = {
     grade: '',
   },
 
+  // 用户设置
+  settings: {
+    backgroundImage: null,       // null = default, data:url = custom image, CSS gradient string
+    glassIntensity: 'normal',   // light | normal | strong
+    isDarkTheme: false,
+  },
+
   plans: [
     { id: uid(), title: '完成高等数学第3章课后习题', category: '学习', estimatedMinutes: 60, completed: false, date: today },
     { id: uid(), title: '背诵考研英语核心词汇 30 个', category: '英语', estimatedMinutes: 25, completed: true, date: today },

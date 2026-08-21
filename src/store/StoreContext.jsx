@@ -47,6 +47,7 @@ export function StoreProvider({ children }) {
   const [activePage, setActivePage] = useState('home')
   const [toasts, setToasts] = useState([])
   const [profileOpen, setProfileOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   // Persist on every change
   useEffect(() => {
@@ -274,6 +275,17 @@ export function StoreProvider({ children }) {
   const openProfile = useCallback(() => setProfileOpen(true), [])
   const closeProfile = useCallback(() => setProfileOpen(false), [])
 
+  const openSettings = useCallback(() => setSettingsOpen(true), [])
+  const closeSettings = useCallback(() => setSettingsOpen(false), [])
+
+  /* ---------------- Settings ---------------- */
+  const updateSettings = useCallback((patch) => {
+    setData((d) => ({
+      ...d,
+      settings: { ...(d.settings || {}), ...patch },
+    }))
+  }, [])
+
   const value = {
     data,
     activePage,
@@ -284,6 +296,10 @@ export function StoreProvider({ children }) {
     profileOpen,
     openProfile,
     closeProfile,
+    settingsOpen,
+    openSettings,
+    closeSettings,
+    updateSettings,
     registerUser,
     loginUserWithPassword,
     loginUser,

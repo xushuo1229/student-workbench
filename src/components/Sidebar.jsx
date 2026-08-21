@@ -7,6 +7,7 @@ import {
   Dumbbell,
   BarChart3,
   Sparkles,
+  Settings,
 } from 'lucide-react'
 import { useStore } from '../store/StoreContext'
 import { clsx } from '../lib/clsx'
@@ -23,7 +24,7 @@ export const NAV_ITEMS = [
 ]
 
 export function Sidebar({ open, onClose }) {
-  const { activePage, setActivePage } = useStore()
+  const { activePage, setActivePage, openSettings } = useStore()
 
   function handleNav(key) {
     setActivePage(key)
@@ -99,6 +100,15 @@ export function Sidebar({ open, onClose }) {
             )
           })}
         </nav>
+
+        {/* Settings button */}
+        <button
+          onClick={openSettings}
+          className="group flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+        >
+          <Settings size={19} strokeWidth={2} />
+          设置
+        </button>
 
         {/* Soft promo card */}
         <div className="mt-2 rounded-3xl bg-gradient-to-br from-brand-100 to-blue-100 p-4">
