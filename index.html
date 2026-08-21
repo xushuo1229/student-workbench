@@ -1121,8 +1121,11 @@ body{font-family:var(--font-display);background:var(--bg-0);color:var(--text-1);
       if(em) em.textContent = profile.avatar || '🍊';
     }
   }
-  applyAvatar(document.getElementById('chipUserAva'), data.profile);
-  document.getElementById('chipUserName').textContent = data.profile.nickname || me;
+  /* 顶栏同步设置（renderProfile 也会做同样的事，这里只在 data 已就绪时执行） */
+  if(typeof data !== 'undefined' && data && data.profile){
+    applyAvatar(document.getElementById('chipUserAva'), data.profile);
+    document.getElementById('chipUserName').textContent = data.profile.nickname || me;
+  }
   document.getElementById('logoutBtn').addEventListener('click', function(){
     if(confirm('确定要退出登录吗？当前账号数据已自动保存。')){
       Store.logout();
