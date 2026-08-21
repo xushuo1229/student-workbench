@@ -184,10 +184,11 @@ function readStoreFromDOM() {
   try {
     const fs = require('fs')
     const storeSrc = fs.readFileSync(path.resolve(__dirname, '../src/store/StoreContext.jsx'), 'utf8')
-    assert(storeSrc.includes('supabase.auth.signUp'), 'StoreContext 使用 Supabase Auth 注册')
-    assert(storeSrc.includes('supabase.auth.signInWithPassword'), 'StoreContext 使用 Supabase Auth 登录')
+    assert(storeSrc.includes('USERS_TABLE') && storeSrc.includes('wb_users'), 'StoreContext 使用自定义用户表 wb_users')
+    assert(storeSrc.includes('hashPassword'), 'StoreContext 使用 SHA-256 密码哈希')
     assert(storeSrc.includes('pushCloudData'), 'StoreContext 包含云端数据推送函数')
     assert(storeSrc.includes('fetchCloudData'), 'StoreContext 包含云端数据拉取函数')
+    assert(storeSrc.includes('saveSession') && storeSrc.includes('loadSession'), 'StoreContext 使用本地会话持久化')
     assert(storeSrc.includes('exportAllData') && storeSrc.includes('importAllData'), '保留导出/导入功能')
   } catch (e) {
     assert(false, 'StoreContext 源码检查失败: ' + e.message)

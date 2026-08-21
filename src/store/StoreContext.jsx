@@ -2,13 +2,24 @@ import { createContext, useContext, useState, useEffect, useCallback, useRef } f
 import { createPortal } from 'react-dom'
 import { initialData } from '../data/initialData'
 import { uid } from '../lib/format'
-import { supabase, USER_DATA_TABLE } from '../lib/supabase'
+import { supabase, USER_DATA_TABLE, USERS_TABLE } from '../lib/supabase'
 
-/* ---- Local storage keys (kept as offline fallback) ---- */
+/* ---- Local storage keys ---- */
 const LOCAL_SETTINGS_KEY = 'student-workbench-settings'
 const LOCAL_CACHE_PREFIX = 'student-workbench-cache-'
+const LOCAL_SESSION_KEY = 'student-workbench-session' // { userId, username }
 
 const StoreContext = createContext(null)
+
+/* ---- SHA-256 password hashing (client-side) ---- */
+async function hashPassword(password) {
+  const encoder = new TextEncoder()
+  const bytes = encoder.encode(password)
+  const hashBuffer = await crypto.subtle.digest('SHA-256', bytes)
+  return Array.from(new Uint8Array(hashBuffer))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+}
 
 /* ---- Local settings (background etc, shared across users) ---- */
 function loadLocalSettings() {
@@ -36,6 +47,23 @@ function setLocalCache(userId, data) {
   try { localStorage.setItem(LOCAL_CACHE_PREFIX + userId, JSON.stringify(data)) } catch (e) { /* ignore */ }
 }
 
+/* ---- Session (login state) ---- */
+function loadSession() {
+  try {
+    const raw = localStorage.getItem(LOCAL_SESSION_KEY)
+    if (raw) return JSON.parse(raw)
+  } catch (e) { /* ignore */ }
+  return null
+}
+
+function saveSession(userId, username) {
+  try { localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify({ userId, username })) } catch (e) { /* ignore */ }
+}
+
+function clearSession() {
+  try { localStorage.removeItem(LOCAL_SESSION_KEY) } catch (e) { /* ignore */ }
+}
+
 /* ---- Cloud: read user's app data from Supabase ---- */
 async function fetchCloudData(userId) {
   const { data, error } = await supabase
@@ -50,7 +78,6 @@ async function fetchCloudData(userId) {
 
 /* ---- Cloud: upsert user's app data to Supabase ---- */
 async function pushCloudData(userId, appData) {
-  // Strip transient fields before saving
   const { isLoggedIn, currentUser, settings, ...cleanData } = appData
 
   const { error } = await supabase
@@ -81,50 +108,29 @@ export function StoreProvider({ children }) {
   const userIdRef = useRef(null)
   const cloudSyncTimer = useRef(null)
 
-  // ---- Auth state listener: auto-login on page refresh ----
+  // ---- On mount: restore session from local storage ----
   useEffect(() => {
-    // Check existing session on mount
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        userIdRef.current = session.user.id
-        loadUserDataFromSource(session.user.id)
-      }
-    })
-
-    // Listen for auth changes (login/logout on other tabs)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
-        userIdRef.current = session.user.id
-        loadUserDataFromSource(session.user.id)
-      } else {
-        userIdRef.current = null
-        setData((d) => ({ ...initialData, settings: d.settings || loadLocalSettings(), isLoggedIn: false, currentUser: '' }))
-      }
-    })
-
-    return () => subscription.unsubscribe()
+    const session = loadSession()
+    if (session?.userId) {
+      userIdRef.current = session.userId
+      loadUserDataFromSource(session.userId, session.username)
+    }
   }, [])
 
   // ---- Load user data: cloud first, local cache fallback ----
-  async function loadUserDataFromSource(userId) {
-    // Try cloud first
+  async function loadUserDataFromSource(userId, username) {
     let userData = await fetchCloudData(userId)
-
-    if (!userData) {
-      // Fallback to local cache
-      userData = getLocalCache(userId)
-    }
+    if (!userData) userData = getLocalCache(userId)
 
     if (userData) {
       setData((d) => ({
         ...userData,
         isLoggedIn: true,
-        currentUser: userData.user?.name || '',
+        currentUser: username || userData.user?.name || '',
         settings: d.settings || loadLocalSettings(),
       }))
     } else {
-      // Brand new user — start with fresh template
-      const fresh = { ...initialData, isLoggedIn: true, currentUser: '' }
+      const fresh = { ...initialData, isLoggedIn: true, currentUser: username || '' }
       setData((d) => ({ ...fresh, settings: d.settings || loadLocalSettings() }))
     }
   }
@@ -133,20 +139,14 @@ export function StoreProvider({ children }) {
   useEffect(() => {
     if (!userIdRef.current || !data.isLoggedIn) return
 
-    // Debounce: wait 800ms after last change before pushing
     if (cloudSyncTimer.current) clearTimeout(cloudSyncTimer.current)
     cloudSyncTimer.current = setTimeout(async () => {
       const userId = userIdRef.current
       if (!userId) return
-
-      // Save to local cache (offline backup)
       setLocalCache(userId, data)
-
-      // Push to cloud
       await pushCloudData(userId, data)
     }, 800)
 
-    // Also persist settings locally always
     if (data.settings) saveLocalSettings(data.settings)
 
     return () => {
@@ -160,7 +160,7 @@ export function StoreProvider({ children }) {
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 2400)
   }, [])
 
-  /* ==================== DATA OPERATIONS (same as before) ==================== */
+  /* ==================== DATA OPERATIONS ==================== */
 
   const addPlan = useCallback((plan) => {
     setData((d) => ({ ...d, plans: [{ id: uid(), completed: false, date: plan.date, ...plan }, ...d.plans] }))
@@ -284,121 +284,105 @@ export function StoreProvider({ children }) {
     pushToast('已恢复示例数据')
   }, [pushToast])
 
-  /* ==================== AUTH: Register (Supabase) ==================== */
+  /* ==================== AUTH: Register (custom users table) ==================== */
   const registerUser = useCallback(async (username, password, profile) => {
-    // Use email as username@workbench.local (Supabase needs email for auth)
-    const email = `${username}@workbench.local`
+    const passwordHash = await hashPassword(password)
 
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          display_name: profile.name || username,
-          avatar: profile.avatar || '🍊',
-          school: profile.school || '',
-          major: profile.major || '',
-          grade: profile.grade || '',
-          motto: profile.motto || '',
-        },
-        // Skip email redirect — we handle it client-side
-        emailRedirectTo: window.location.origin,
+    // Check if username already exists
+    const { data: existing } = await supabase
+      .from(USERS_TABLE)
+      .select('id')
+      .eq('username', username)
+      .maybeSingle()
+
+    if (existing) {
+      throw new Error('该用户名已被注册，请换一个或直接登录')
+    }
+
+    // Insert new user
+    const { data: newUser, error } = await supabase
+      .from(USERS_TABLE)
+      .insert({
+        username,
+        password_hash: passwordHash,
+        display_name: profile.name || username,
+        avatar: profile.avatar || '🍊',
+        school: profile.school || '',
+        major: profile.major || '',
+        grade: profile.grade || '',
+        motto: profile.motto || '',
+      })
+      .select()
+      .single()
+
+    if (error) throw new Error(error.message)
+
+    // Save session locally
+    userIdRef.current = newUser.id
+    saveSession(newUser.id, username)
+
+    // Set state
+    const freshData = {
+      ...initialData,
+      isLoggedIn: true,
+      currentUser: username,
+      user: {
+        name: profile.name || username,
+        avatar: profile.avatar || '🍊',
+        school: profile.school || '',
+        major: profile.major || '',
+        grade: profile.grade || '',
+        motto: profile.motto || '',
       },
-    })
-
-    if (error) {
-      // User already exists in auth — try logging in
-      if (error.message?.includes('already registered') || error.status === 422) {
-        return loginUserWithPassword(username, password)
-      }
-      throw new Error(error.message)
     }
+    setData((d) => ({ ...freshData, settings: d.settings || loadLocalSettings() }))
+    return true
+  }, [pushToast])
 
-    // Supabase v2 returns user even when email confirmation is required.
-    // If session exists → auto-confirmed (or email confirm disabled). Use it.
-    // If no session but user exists → email confirm is blocking.
-    if (data.user) {
-      if (data.session) {
-        // Confirmed / auto-confirmed → full login
-        userIdRef.current = data.user.id
-        const freshData = {
-          ...initialData,
-          isLoggedIn: true,
-          currentUser: username,
-          user: {
-            name: profile.name || username,
-            avatar: profile.avatar || '🍊',
-            school: profile.school || '',
-            major: profile.major || '',
-            grade: profile.grade || '',
-            motto: profile.motto || '',
-          },
-        }
-        setData((d) => ({ ...freshData, settings: d.settings || loadLocalSettings() }))
-        return true
-      } else {
-        // User created but not confirmed — try immediate sign-in
-        // (works when "Confirm email" is turned OFF in Supabase settings)
-        try {
-          return await loginUserWithPassword(username, password)
-        } catch {
-          throw new Error('注册成功但需要邮箱验证。请在 Supabase 控制台关闭「Confirm email」设置，或直接用此账号登录。')
-        }
-      }
-    }
-
-    return false
-  }, [])
-
-  /* ==================== AUTH: Login (Supabase) ==================== */
+  /* ==================== AUTH: Login (custom users table) ==================== */
   const loginUserWithPassword = useCallback(async (username, password) => {
-    const email = `${username}@workbench.local`
+    const passwordHash = await hashPassword(password)
 
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
+    // Fetch user by username
+    const { data: userRow, error } = await supabase
+      .from(USERS_TABLE)
+      .select('*')
+      .eq('username', username)
+      .maybeSingle()
 
-    if (error) {
-      if (error.message?.includes('Invalid login') || error.message?.includes('Email not confirmed')) {
-        // More helpful message
-        throw new Error('账号不存在或密码错误。如果是首次使用云端版，请先点「注册」创建新账号。')
-      }
-      throw new Error(error.message)
+    if (error) throw new Error('登录失败，请检查网络')
+    if (!userRow) throw new Error('账号不存在，请先注册')
+
+    if (userRow.password_hash !== passwordHash) {
+      throw new Error('密码错误，请重试')
     }
 
-    if (data.user) {
-      userIdRef.current = data.user.id
+    // Success — save session
+    userIdRef.current = userRow.id
+    saveSession(userRow.id, username)
 
-      // Load user's metadata from Supabase auth
-      const meta = data.user.user_metadata || {}
-      const displayName = meta.display_name || username
+    // Load app data
+    const cloudAppData = await fetchCloudData(userRow.id)
+    const cachedData = getLocalCache(userRow.id)
+    const appData = cloudAppData || cachedData
 
-      // Load user's app data from cloud
-      const cloudAppData = await fetchCloudData(data.user.id)
-      const cachedData = getLocalCache(data.user.id)
-      const appData = cloudAppData || cachedData
+    setData((d) => ({
+      ...(appData || initialData),
+      isLoggedIn: true,
+      currentUser: username,
+      user: {
+        name: userRow.display_name || username,
+        avatar: userRow.avatar || '🍊',
+        school: userRow.school || appData?.user?.school || '',
+        major: userRow.major || appData?.user?.major || '',
+        grade: userRow.grade || appData?.user?.grade || '',
+        motto: userRow.motto || appData?.user?.motto || '',
+      },
+      settings: d.settings || loadLocalSettings(),
+    }))
 
-      setData((d) => ({
-        ...(appData || initialData),
-        isLoggedIn: true,
-        currentUser: displayName,
-        user: {
-          name: displayName,
-          avatar: meta.avatar || '🍊',
-          school: meta.school || appData?.user?.school || '',
-          major: meta.major || appData?.user?.major || '',
-          grade: meta.grade || appData?.user?.grade || '',
-          motto: meta.motto || appData?.user?.motto || '',
-        },
-        settings: d.settings || loadLocalSettings(),
-      }))
-
-      return true
-    }
-
-    return false
-  }, [])
+    return true
+  }, [pushToast])
 
   /* ==================== Profile editing ==================== */
   const loginUser = useCallback((profile) => {
@@ -409,18 +393,19 @@ export function StoreProvider({ children }) {
   const updateUser = useCallback(async (patch) => {
     const newUser = { ...data.user, ...patch }
 
-    // Update Supabase auth metadata
+    // Update profile in cloud (wb_users table)
     if (userIdRef.current) {
-      await supabase.auth.updateUser({
-        data: {
+      await supabase
+        .from(USERS_TABLE)
+        .update({
           display_name: newUser.name,
           avatar: newUser.avatar,
           school: newUser.school,
           major: newUser.major,
           grade: newUser.grade,
           motto: newUser.motto,
-        },
-      })
+        })
+        .eq('id', userIdRef.current)
     }
 
     setData((d) => ({ ...d, user: newUser }))
@@ -428,8 +413,8 @@ export function StoreProvider({ children }) {
   }, [pushToast, data.user])
 
   const logoutUser = useCallback(async () => {
-    await supabase.auth.signOut()
     userIdRef.current = null
+    clearSession()
     setData((d) => ({
       ...initialData,
       settings: d.settings || loadLocalSettings(),
@@ -453,19 +438,19 @@ export function StoreProvider({ children }) {
     }))
   }, [])
 
-  /* ==================== Export / Import (still works for backup) ==================== */
+  /* ==================== Export / Import ==================== */
   const exportAllData = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('请先登录')
+    const session = loadSession()
+    if (!session?.userId) throw new Error('请先登录')
 
-    const cloudData = await fetchCloudData(user.id)
+    const cloudData = await fetchCloudData(session.userId)
     const localSettings = loadLocalSettings()
 
     return {
       version: 1,
       exportedAt: new Date().toISOString(),
-      source: 'supabase',
-      userId: user.id,
+      source: 'supabase-custom',
+      userId: session.userId,
       appData: cloudData || {},
       settings: localSettings,
     }
@@ -474,29 +459,26 @@ export function StoreProvider({ children }) {
   const importAllData = useCallback(async (jsonObj, mode = 'merge') => {
     if (!jsonObj || jsonObj.version === undefined) throw new Error('无效的备份文件格式')
 
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('请先登录')
+    const session = loadSession()
+    if (!session?.userId) throw new Error('请先登录')
 
     let mergedData
     if (mode === 'overwrite' || !userIdRef.current) {
       mergedData = jsonObj.appData || {}
     } else {
-      // Merge: cloud data takes precedence for existing keys, import fills gaps
-      const existing = await fetchCloudData(user.id)
+      const existing = await fetchCloudData(session.userId)
       mergedData = { ...(existing || {}), ...(jsonObj.appData || {}) }
     }
 
-    // Write merged data to cloud
-    await pushCloudData(user.id, {
+    await pushCloudData(session.userId, {
       ...mergedData,
       isLoggedIn: true,
       currentUser: data.currentUser,
     })
 
-    // Reload from cloud
-    await loadUserDataFromSource(user.id)
+    await loadUserDataFromSource(session.userId, session.username)
+    localStorage.setItem(LOCAL_CACHE_PREFIX + session.userId, JSON.stringify(mergedData))
 
-    // Import settings
     if (jsonObj.settings) {
       saveLocalSettings({ ...loadLocalSettings(), ...jsonObj.settings })
       setData((d) => ({ ...d, settings: { ...(d.settings || {}), ...jsonObj.settings } }))
@@ -511,7 +493,6 @@ export function StoreProvider({ children }) {
     setActivePage,
     toasts,
     pushToast,
-    // ui modals
     profileOpen,
     openProfile,
     closeProfile,
@@ -519,13 +500,11 @@ export function StoreProvider({ children }) {
     openSettings,
     closeSettings,
     updateSettings,
-    // auth (Supabase-based)
     registerUser,
     loginUserWithPassword,
     loginUser,
     updateUser,
     logoutUser,
-    // data ops
     addPlan, updatePlan, deletePlan, togglePlan,
     addCourse, updateCourse, deleteCourse, addNote, deleteNote,
     addReading, updateReading, deleteReading,
@@ -533,7 +512,6 @@ export function StoreProvider({ children }) {
     addSport, updateSport, deleteSport,
     addWeekly, updateWeekly, deleteWeekly, toggleWeekly,
     resetAll,
-    // export/import
     exportAllData,
     importAllData,
   }
