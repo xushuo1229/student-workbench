@@ -2,223 +2,166 @@ import { createContext, useContext, useState, useEffect, useCallback, useRef } f
 import { createPortal } from 'react-dom'
 import { initialData } from '../data/initialData'
 import { uid } from '../lib/format'
+import { supabase, USER_DATA_TABLE } from '../lib/supabase'
 
-const ACCOUNTS_KEY = 'student-workbench-accounts'
-const SESSION_KEY = 'student-workbench-session'    // {isLoggedIn, currentUser}
-const DATA_KEY_PREFIX = 'student-workbench-data-'  // per-user: student-workbench-data-{username}
-const SETTINGS_GLOBAL_KEY = 'student-workbench-settings' // global settings (bg, etc)
-const EXPORT_VERSION = 1
+/* ---- Local storage keys (kept as offline fallback) ---- */
+const LOCAL_SETTINGS_KEY = 'student-workbench-settings'
+const LOCAL_CACHE_PREFIX = 'student-workbench-cache-'
+
 const StoreContext = createContext(null)
 
-/* ---- Account storage ---- */
-function loadAccounts() {
+/* ---- Local settings (background etc, shared across users) ---- */
+function loadLocalSettings() {
   try {
-    const raw = localStorage.getItem(ACCOUNTS_KEY)
-    if (raw) return JSON.parse(raw)
-  } catch (e) { /* ignore */ }
-  return {}
-}
-
-function saveAccounts(accounts) {
-  try { localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts)) } catch (e) { /* ignore */ }
-}
-
-/* ---- Session (login state only, no user data) ---- */
-function loadSession() {
-  try {
-    const raw = localStorage.getItem(SESSION_KEY)
-    if (raw) return JSON.parse(raw)
-  } catch (e) { /* ignore */ }
-  return { isLoggedIn: false, currentUser: '' }
-}
-
-function saveSession(session) {
-  try { localStorage.setItem(SESSION_KEY, JSON.stringify(session)) } catch (e) { /* ignore */ }
-}
-
-/* ---- Per-user data loader/saver ---- */
-function loadUserData(username) {
-  const key = DATA_KEY_PREFIX + username
-  try {
-    const raw = localStorage.getItem(key)
-    if (raw) {
-      const parsed = JSON.parse(raw)
-      if (parsed && typeof parsed === 'object') return parsed
-    }
-  } catch (e) { /* ignore */ }
-  // Fresh user data from template
-  return {
-    ...initialData,
-    isLoggedIn: true,
-    currentUser: username,
-  }
-}
-
-function saveUserData(username, userData) {
-  const key = DATA_KEY_PREFIX + username
-  try { localStorage.setItem(key, JSON.stringify(userData)) } catch (e) { /* ignore */ }
-}
-
-/* ---- Global settings (shared across users, e.g. background) ---- */
-function loadGlobalSettings() {
-  try {
-    const raw = localStorage.getItem(SETTINGS_GLOBAL_KEY)
+    const raw = localStorage.getItem(LOCAL_SETTINGS_KEY)
     if (raw) return JSON.parse(raw)
   } catch (e) { /* ignore */ }
   return initialData.settings || {}
 }
 
-function saveGlobalSettings(settings) {
-  try { localStorage.setItem(SETTINGS_GLOBAL_KEY, JSON.stringify(settings)) } catch (e) { /* ignore */ }
+function saveLocalSettings(settings) {
+  try { localStorage.setItem(LOCAL_SETTINGS_KEY, JSON.stringify(settings)) } catch (e) { /* ignore */ }
 }
 
-/* ---- Password hash ---- */
-async function hashPassword(password) {
-  const encoder = new TextEncoder()
-  const data = encoder.encode(password + '_swb_salt_v1')
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
-  return Array.from(new Uint8Array(hashBuffer)).map((b) => b.toString(16).padStart(2, '0')).join('')
-}
-
-/* ---- Migration: convert old single-data format to per-user ---- */
-function migrateOldData() {
-  const OLD_KEY = 'student-workbench-v1'
+/* ---- Local cache for offline use ---- */
+function getLocalCache(userId) {
   try {
-    const raw = localStorage.getItem(OLD_KEY)
-    if (!raw) return false
-    const oldData = JSON.parse(raw)
-    if (!oldData || !oldData.currentUser) return false
-
-    const username = oldData.currentUser
-    // Check if already migrated
-    if (localStorage.getItem(DATA_KEY_PREFIX + username)) return false
-
-    // Save old data under the user's key (strip session fields)
-    const { isLoggedIn, currentUser, ...userData } = oldData
-    saveUserData(username, userData)
-
-    // Save settings globally if present
-    if (oldData.settings) {
-      saveGlobalSettings(oldData.settings)
-    }
-
-    // Remove old key to prevent re-migration
-    localStorage.removeItem(OLD_KEY)
-    return true
-  } catch (e) {
-    return false
-  }
+    const raw = localStorage.getItem(LOCAL_CACHE_PREFIX + userId)
+    if (raw) return JSON.parse(raw)
+  } catch (e) { /* ignore */ }
+  return null
 }
 
-/* ---- Export / Import ---- */
-export function exportAllData() {
-  const accounts = loadAccounts()
-  const usersData = {}
-  const globalSettings = loadGlobalSettings()
-
-  // Collect each user's data
-  for (const username of Object.keys(accounts)) {
-    try {
-      const raw = localStorage.getItem(DATA_KEY_PREFIX + username)
-      if (raw) usersData[username] = JSON.parse(raw)
-    } catch (e) { /* skip corrupt */ }
-  }
-
-  return {
-    version: EXPORT_VERSION,
-    exportedAt: new Date().toISOString(),
-    accounts,
-    usersData,
-    globalSettings,
-  }
+function setLocalCache(userId, data) {
+  try { localStorage.setItem(LOCAL_CACHE_PREFIX + userId, JSON.stringify(data)) } catch (e) { /* ignore */ }
 }
 
-export function importAllData(jsonObj, mode = 'merge') {
-  // mode: 'merge' = merge with existing, 'overwrite' = replace everything
-  if (!jsonObj || jsonObj.version === undefined) throw new Error('无效的备份文件格式')
+/* ---- Cloud: read user's app data from Supabase ---- */
+async function fetchCloudData(userId) {
+  const { data, error } = await supabase
+    .from(USER_DATA_TABLE)
+    .select('data')
+    .eq('user_id', userId)
+    .single()
 
-  if (mode === 'overwrite') {
-    // Clear existing
-    const existingAccounts = loadAccounts()
-    for (const u of Object.keys(existingAccounts)) {
-      localStorage.removeItem(DATA_KEY_PREFIX + u)
-    }
-  }
+  if (error || !data) return null
+  return data.data
+}
 
-  // Import accounts (merge or overwrite)
-  const existingAccounts = mode === 'overwrite' ? {} : loadAccounts()
-  const mergedAccounts = { ...existingAccounts, ...(jsonObj.accounts || {}) }
-  saveAccounts(mergedAccounts)
+/* ---- Cloud: upsert user's app data to Supabase ---- */
+async function pushCloudData(userId, appData) {
+  // Strip transient fields before saving
+  const { isLoggedIn, currentUser, settings, ...cleanData } = appData
 
-  // Import per-user data
-  for (const [username, userData] of Object.entries(jsonObj.usersData || {})) {
-    if (typeof userData === 'object' && userData !== null) {
-      saveUserData(username, userData)
-    }
-  }
+  const { error } = await supabase
+    .from(USER_DATA_TABLE)
+    .upsert(
+      {
+        user_id: userId,
+        data: cleanData,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'user_id' },
+    )
 
-  // Import global settings
-  if (jsonObj.globalSettings) {
-    saveGlobalSettings({ ...loadGlobalSettings(), ...jsonObj.globalSettings })
-  }
-
-  return Object.keys(jsonObj.accounts || {}).length
+  return !error
 }
 
 export function StoreProvider({ children }) {
-  const [data, setData] = useState(() => {
-    // Try migration first
-    migrateOldData()
-
-    // Load session
-    const session = loadSession()
-    if (session.isLoggedIn && session.currentUser) {
-      // Load this specific user's data
-      const userData = loadUserData(session.currentUser)
-      return {
-        ...userData,
-        isLoggedIn: true,
-        currentUser: session.currentUser,
-        settings: loadGlobalSettings(),
-      }
-    }
-    // Not logged in — show initial data (will be replaced on login)
-    return { ...initialData, settings: loadGlobalSettings() }
-  })
-
+  const [data, setData] = useState(() => ({
+    ...initialData,
+    settings: loadLocalSettings(),
+  }))
   const [activePage, setActivePage] = useState('home')
   const [toasts, setToasts] = useState([])
   const [profileOpen, setProfileOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
 
-  // Track current user for saving
-  const currentUserRef = useRef(data.currentUser)
+  // Track current user ID for cloud operations
+  const userIdRef = useRef(null)
+  const cloudSyncTimer = useRef(null)
 
-  // Persist user data on every change (only when logged in)
+  // ---- Auth state listener: auto-login on page refresh ----
   useEffect(() => {
-    currentUserRef.current = data.currentUser
-    // Always persist global settings
-    if (data.settings) {
-      saveGlobalSettings(data.settings)
+    // Check existing session on mount
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        userIdRef.current = session.user.id
+        loadUserDataFromSource(session.user.id)
+      }
+    })
+
+    // Listen for auth changes (login/logout on other tabs)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        userIdRef.current = session.user.id
+        loadUserDataFromSource(session.user.id)
+      } else {
+        userIdRef.current = null
+        setData((d) => ({ ...initialData, settings: d.settings || loadLocalSettings(), isLoggedIn: false, currentUser: '' }))
+      }
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
+  // ---- Load user data: cloud first, local cache fallback ----
+  async function loadUserDataFromSource(userId) {
+    // Try cloud first
+    let userData = await fetchCloudData(userId)
+
+    if (!userData) {
+      // Fallback to local cache
+      userData = getLocalCache(userId)
     }
-    // Persist per-user data only when logged in
-    if (data.isLoggedIn && data.currentUser) {
-      const { isLoggedIn, currentUser, ...userData } = data
-      saveUserData(currentUser, { ...userData, isLoggedIn: true, currentUser })
+
+    if (userData) {
+      setData((d) => ({
+        ...userData,
+        isLoggedIn: true,
+        currentUser: userData.user?.name || '',
+        settings: d.settings || loadLocalSettings(),
+      }))
+    } else {
+      // Brand new user — start with fresh template
+      const fresh = { ...initialData, isLoggedIn: true, currentUser: '' }
+      setData((d) => ({ ...fresh, settings: d.settings || loadLocalSettings() }))
     }
-    // Update session
-    saveSession({ isLoggedIn: data.isLoggedIn, currentUser: data.currentUser || '' })
+  }
+
+  // ---- Auto-sync to cloud on data changes (debounced) ----
+  useEffect(() => {
+    if (!userIdRef.current || !data.isLoggedIn) return
+
+    // Debounce: wait 800ms after last change before pushing
+    if (cloudSyncTimer.current) clearTimeout(cloudSyncTimer.current)
+    cloudSyncTimer.current = setTimeout(async () => {
+      const userId = userIdRef.current
+      if (!userId) return
+
+      // Save to local cache (offline backup)
+      setLocalCache(userId, data)
+
+      // Push to cloud
+      await pushCloudData(userId, data)
+    }, 800)
+
+    // Also persist settings locally always
+    if (data.settings) saveLocalSettings(data.settings)
+
+    return () => {
+      if (cloudSyncTimer.current) clearTimeout(cloudSyncTimer.current)
+    }
   }, [data])
 
   const pushToast = useCallback((message, type = 'success') => {
     const id = uid()
     setToasts((t) => [...t, { id, message, type }])
-    setTimeout(() => {
-      setToasts((t) => t.filter((x) => x.id !== id))
-    }, 2400)
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 2400)
   }, [])
 
-  /* ---------------- Plans ---------------- */
+  /* ==================== DATA OPERATIONS (same as before) ==================== */
+
   const addPlan = useCallback((plan) => {
     setData((d) => ({ ...d, plans: [{ id: uid(), completed: false, date: plan.date, ...plan }, ...d.plans] }))
     pushToast('已添加计划')
@@ -240,7 +183,6 @@ export function StoreProvider({ children }) {
     }))
   }, [])
 
-  /* ---------------- Courses ---------------- */
   const addCourse = useCallback((course) => {
     setData((d) => ({ ...d, courses: [{ id: uid(), progress: 0, notes: [], color: 'purple', ...course }, ...d.courses] }))
     pushToast('已添加课程')
@@ -274,7 +216,6 @@ export function StoreProvider({ children }) {
     }))
   }, [])
 
-  /* ---------------- Readings ---------------- */
   const addReading = useCallback((reading) => {
     setData((d) => ({ ...d, readings: [{ id: uid(), date: reading.date, ...reading }, ...d.readings] }))
     pushToast('已记录阅读')
@@ -289,7 +230,6 @@ export function StoreProvider({ children }) {
     pushToast('已删除阅读记录')
   }, [pushToast])
 
-  /* ---------------- English ---------------- */
   const addEnglish = useCallback((item) => {
     setData((d) => ({ ...d, english: [{ id: uid(), date: item.date, ...item }, ...d.english] }))
     pushToast('已保存英语学习')
@@ -304,7 +244,6 @@ export function StoreProvider({ children }) {
     pushToast('已删除英语学习')
   }, [pushToast])
 
-  /* ---------------- Sports ---------------- */
   const addSport = useCallback((sport) => {
     setData((d) => ({ ...d, sports: [{ id: uid(), date: sport.date, ...sport }, ...d.sports] }))
     pushToast('已记录运动')
@@ -319,7 +258,6 @@ export function StoreProvider({ children }) {
     pushToast('已删除运动记录')
   }, [pushToast])
 
-  /* ---------------- Weekly Plan ---------------- */
   const addWeekly = useCallback((item) => {
     setData((d) => ({ ...d, weeklyPlan: [{ id: uid(), completed: false, ...item }, ...d.weeklyPlan] }))
     pushToast('已添加周计划')
@@ -342,85 +280,145 @@ export function StoreProvider({ children }) {
   }, [])
 
   const resetAll = useCallback(() => {
-    setData({ ...initialData, settings: loadGlobalSettings() })
+    setData((d) => ({ ...initialData, settings: d.settings || loadLocalSettings() }))
     pushToast('已恢复示例数据')
   }, [pushToast])
 
-  /* ---------------- Auth: Register ---------------- */
+  /* ==================== AUTH: Register (Supabase) ==================== */
   const registerUser = useCallback(async (username, password, profile) => {
-    const accounts = loadAccounts()
-    if (accounts[username]) return false
+    // Use email as username@workbench.local (Supabase needs email for auth)
+    const email = `${username}@workbench.local`
 
-    const hashedPassword = await hashPassword(password)
-    accounts[username] = {
-      passwordHash: hashedPassword,
-      profile: {
-        name: profile.name || username,
-        avatar: profile.avatar || '🍊',
-        grade: profile.grade || '',
-        major: profile.major || '',
-        school: profile.school || '',
-        motto: profile.motto || '',
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          display_name: profile.name || username,
+          avatar: profile.avatar || '🍊',
+          school: profile.school || '',
+          major: profile.major || '',
+          grade: profile.grade || '',
+          motto: profile.motto || '',
+        },
       },
-      createdAt: new Date().toISOString(),
+    })
+
+    if (error) {
+      // User might already exist — try logging in instead
+      if (error.message.includes('already registered') || error.status === 422) {
+        return loginUserWithPassword(username, password)
+      }
+      throw new Error(error.message)
     }
-    saveAccounts(accounts)
 
-    // Initialize fresh data for new user & switch to it
-    const freshData = loadUserData(username)
-    setData({
-      ...freshData,
-      settings: loadGlobalSettings(),
-    })
-    return true
+    if (data.user) {
+      userIdRef.current = data.user.id
+
+      // Set user info in our data
+      const freshData = {
+        ...initialData,
+        isLoggedIn: true,
+        currentUser: username,
+        user: {
+          name: profile.name || username,
+          avatar: profile.avatar || '🍊',
+          school: profile.school || '',
+          major: profile.major || '',
+          grade: profile.grade || '',
+          motto: profile.motto || '',
+        },
+      }
+
+      setData((d) => ({ ...freshData, settings: d.settings || loadLocalSettings() }))
+      return true
+    }
+
+    return false
   }, [])
 
-  /* ---------------- Auth: Login ---------------- */
+  /* ==================== AUTH: Login (Supabase) ==================== */
   const loginUserWithPassword = useCallback(async (username, password) => {
-    const accounts = loadAccounts()
-    const account = accounts[username]
-    if (!account) return false
+    const email = `${username}@workbench.local`
 
-    const hashedInput = await hashPassword(password)
-    if (hashedInput !== account.passwordHash) return false
-
-    // Load THIS user's data (isolated from other users)
-    const userData = loadUserData(username)
-    setData({
-      ...userData,
-      isLoggedIn: true,
-      currentUser: username,
-      settings: loadGlobalSettings(),
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
     })
-    return true
+
+    if (error) {
+      if (error.message.includes('Invalid login')) {
+        return false // Wrong password or user doesn't exist
+      }
+      throw new Error(error.message)
+    }
+
+    if (data.user) {
+      userIdRef.current = data.user.id
+
+      // Load user's metadata from Supabase auth
+      const meta = data.user.user_metadata || {}
+      const displayName = meta.display_name || username
+
+      // Load user's app data from cloud
+      const cloudAppData = await fetchCloudData(data.user.id)
+      const cachedData = getLocalCache(data.user.id)
+      const appData = cloudAppData || cachedData
+
+      setData((d) => ({
+        ...(appData || initialData),
+        isLoggedIn: true,
+        currentUser: displayName,
+        user: {
+          name: displayName,
+          avatar: meta.avatar || '🍊',
+          school: meta.school || appData?.user?.school || '',
+          major: meta.major || appData?.user?.major || '',
+          grade: meta.grade || appData?.user?.grade || '',
+          motto: meta.motto || appData?.user?.motto || '',
+        },
+        settings: d.settings || loadLocalSettings(),
+      }))
+
+      return true
+    }
+
+    return false
   }, [])
 
-  /* ---------------- User Profile editing ---------------- */
+  /* ==================== Profile editing ==================== */
   const loginUser = useCallback((profile) => {
     setData((d) => ({ ...d, isLoggedIn: true, user: { ...d.user, ...profile } }))
     pushToast('欢迎回来，开始今日成长 🎉')
   }, [pushToast])
 
-  const updateUser = useCallback((patch) => {
-    setData((d) => {
-      const newUser = { ...d.user, ...patch }
-      // Sync back to account storage
-      if (d.currentUser) {
-        const accounts = loadAccounts()
-        if (accounts[d.currentUser]) {
-          accounts[d.currentUser].profile = newUser
-          saveAccounts(accounts)
-        }
-      }
-      return { ...d, user: newUser }
-    })
-    pushToast('资料已更新')
-  }, [pushToast])
+  const updateUser = useCallback(async (patch) => {
+    const newUser = { ...data.user, ...patch }
 
-  const logoutUser = useCallback(() => {
+    // Update Supabase auth metadata
+    if (userIdRef.current) {
+      await supabase.auth.updateUser({
+        data: {
+          display_name: newUser.name,
+          avatar: newUser.avatar,
+          school: newUser.school,
+          major: newUser.major,
+          grade: newUser.grade,
+          motto: newUser.motto,
+        },
+      })
+    }
+
+    setData((d) => ({ ...d, user: newUser }))
+    pushToast('资料已更新')
+  }, [pushToast, data.user])
+
+  const logoutUser = useCallback(async () => {
+    await supabase.auth.signOut()
+    userIdRef.current = null
     setData((d) => ({
       ...initialData,
-      settings: d.settings || loadGlobalSettings(),
+      settings: d.settings || loadLocalSettings(),
       isLoggedIn: false,
       currentUser: '',
     }))
@@ -433,7 +431,7 @@ export function StoreProvider({ children }) {
   const openSettings = useCallback(() => setSettingsOpen(true), [])
   const closeSettings = useCallback(() => setSettingsOpen(false), [])
 
-  /* ---------------- Settings ---------------- */
+  /* ==================== Settings ==================== */
   const updateSettings = useCallback((patch) => {
     setData((d) => ({
       ...d,
@@ -441,13 +439,65 @@ export function StoreProvider({ children }) {
     }))
   }, [])
 
+  /* ==================== Export / Import (still works for backup) ==================== */
+  const exportAllData = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error('请先登录')
+
+    const cloudData = await fetchCloudData(user.id)
+    const localSettings = loadLocalSettings()
+
+    return {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      source: 'supabase',
+      userId: user.id,
+      appData: cloudData || {},
+      settings: localSettings,
+    }
+  }, [])
+
+  const importAllData = useCallback(async (jsonObj, mode = 'merge') => {
+    if (!jsonObj || jsonObj.version === undefined) throw new Error('无效的备份文件格式')
+
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error('请先登录')
+
+    let mergedData
+    if (mode === 'overwrite' || !userIdRef.current) {
+      mergedData = jsonObj.appData || {}
+    } else {
+      // Merge: cloud data takes precedence for existing keys, import fills gaps
+      const existing = await fetchCloudData(user.id)
+      mergedData = { ...(existing || {}), ...(jsonObj.appData || {}) }
+    }
+
+    // Write merged data to cloud
+    await pushCloudData(user.id, {
+      ...mergedData,
+      isLoggedIn: true,
+      currentUser: data.currentUser,
+    })
+
+    // Reload from cloud
+    await loadUserDataFromSource(user.id)
+
+    // Import settings
+    if (jsonObj.settings) {
+      saveLocalSettings({ ...loadLocalSettings(), ...jsonObj.settings })
+      setData((d) => ({ ...d, settings: { ...(d.settings || {}), ...jsonObj.settings } }))
+    }
+
+    return 1
+  }, [data.currentUser])
+
   const value = {
     data,
     activePage,
     setActivePage,
     toasts,
     pushToast,
-    // user / auth
+    // ui modals
     profileOpen,
     openProfile,
     closeProfile,
@@ -455,22 +505,18 @@ export function StoreProvider({ children }) {
     openSettings,
     closeSettings,
     updateSettings,
+    // auth (Supabase-based)
     registerUser,
     loginUserWithPassword,
     loginUser,
     updateUser,
     logoutUser,
-    // plans
+    // data ops
     addPlan, updatePlan, deletePlan, togglePlan,
-    // courses
     addCourse, updateCourse, deleteCourse, addNote, deleteNote,
-    // readings
     addReading, updateReading, deleteReading,
-    // english
     addEnglish, updateEnglish, deleteEnglish,
-    // sports
     addSport, updateSport, deleteSport,
-    // weekly
     addWeekly, updateWeekly, deleteWeekly, toggleWeekly,
     resetAll,
     // export/import
