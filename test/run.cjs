@@ -100,7 +100,7 @@ async function main() {
   assert(document.body.textContent.includes('创建账号'), '切换到注册模式')
 
   // Fill registration form
-  const regUserInput = inputByPlaceholder('2-20个字符')
+  const regUserInput = inputByPlaceholder('1-20个字符')
   assert(!!regUserInput, '注册表单含用户名输入框')
   if (regUserInput) setInput(regUserInput, 'testuser_smoke')
   const regPassInput = inputByPlaceholder('至少4位')
@@ -315,6 +315,29 @@ async function main() {
   await tick(100)
   assert(readStore().isLoggedIn === true, '密码登录成功，isLoggedIn=true')
   assert(readStore().currentUser === 'testuser_smoke', '登录后 currentUser 正确')
+
+  /* ==================== SINGLE-CHAR USERNAME ==================== */
+  console.log('\n[11] 单字符用户名注册')
+  // logout, then register a 1-char username
+  const avatarBtn2 = [...document.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === '查看个人资料')
+  if (avatarBtn2) await click(avatarBtn2)
+  await tick(60)
+  await click('退出登录')
+  await tick(60)
+  assert(document.body.textContent.includes('欢迎回来'), '回到登录界面')
+  await click('注册')
+  await tick(60)
+  const singleInput = inputByPlaceholder('1-20个字符')
+  if (singleInput) setInput(singleInput, 'A')
+  const sp = inputByPlaceholder('至少4位')
+  if (sp) setInput(sp, 'pass1234')
+  const sc = inputByPlaceholder('再次输入密码')
+  if (sc) setInput(sc, 'pass1234')
+  await click('注 册')
+  await tick(100)
+  const singleStore = readStore()
+  assert(singleStore.currentUser === 'A', '单字符用户名「A」注册并登录成功')
+  assert(JSON.parse(localStorage.getItem(ACC_KEY) || '{}')['A'] !== undefined, '单字符用户名已存入账号簿')
 
   /* ==================== RESULT ==================== */
   console.log(`\n==== 结果：通过 ${passed} 项，失败 ${failures.length} 项 ====`)

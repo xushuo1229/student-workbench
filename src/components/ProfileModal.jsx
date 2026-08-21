@@ -1,19 +1,50 @@
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { X, LogOut, Pencil, Check, User as UserIcon } from 'lucide-react'
+import { X, LogOut, Pencil, Check, User as UserIcon, Upload } from 'lucide-react'
 import { useStore } from '../store/StoreContext'
 import { Button } from './ui/Modal'
+import { Avatar } from './ui/Avatar'
 import { clsx } from '../lib/clsx'
+import { fileToAvatarDataUrl } from '../lib/avatar'
 
 const AVATARS = ['🍊', '🐱', '🐰', '🦊', '🐼', '🌟', '🍎', '🌈', '🐻', '🦄', '🐯', '🌸']
 const GRADES = ['大一', '大二', '大三', '大四', '研究生', '其他']
 
 function UserFields({ form, setForm }) {
+  const handleAvatarUpload = async (e) => {
+    const file = e.target.files && e.target.files[0]
+    if (!file) return
+    try {
+      const dataUrl = await fileToAvatarDataUrl(file)
+      setForm({ ...form, avatar: dataUrl })
+    } catch (err) {
+      // non-fatal: ignore upload errors in profile edit
+    }
+    e.target.value = ''
+  }
+
   return (
     <div className="space-y-4">
       <div>
         <p className="label-base">选择头像</p>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Upload local photo (computer / phone) */}
+          <label
+            title="上传本地头像"
+            className={clsx(
+              'relative flex h-11 w-11 cursor-pointer items-center justify-center overflow-hidden rounded-2xl border border-dashed transition',
+              form.avatar && form.avatar.startsWith('data:')
+                ? 'border-brand-400 bg-brand-100'
+                : 'border-brand-300 bg-white text-brand-500 hover:bg-brand-50',
+            )}
+          >
+            {form.avatar && form.avatar.startsWith('data:') ? (
+              <img src={form.avatar} alt="" className="h-full w-full object-cover" />
+            ) : (
+              <Upload size={18} />
+            )}
+            <input type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
+          </label>
           {AVATARS.map((a) => (
             <button
               key={a}
@@ -131,9 +162,7 @@ export function ProfileModal({ mode = 'manage' }) {
         {/* Header */}
         <div className="flex items-start justify-between gap-4 px-6 pt-6">
           <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-100 text-2xl">
-              {data.user.avatar}
-            </div>
+            <Avatar value={data.user.avatar} size={48} />
             <div>
               <h2 className="text-lg font-semibold text-slate-800">{data.user.name}</h2>
               <p className="text-xs text-slate-400">{summary || '我的个人资料'}</p>
@@ -155,9 +184,7 @@ export function ProfileModal({ mode = 'manage' }) {
           ) : (
             <div className="space-y-2.5">
               <div className="flex flex-col items-center py-2">
-                <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-brand-100 text-4xl shadow-glass">
-                  {data.user.avatar}
-                </div>
+                <Avatar value={data.user.avatar} size={80} className="shadow-glass" />
                 <p className="mt-3 text-lg font-bold text-slate-800">{data.user.name}</p>
                 {data.data?.currentUser && (
                   <p className="mt-0.5 text-xs text-slate-400">@{data.currentUser}</p>

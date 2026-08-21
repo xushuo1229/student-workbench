@@ -1,5 +1,6 @@
 import { useStore } from '../store/StoreContext'
 import { Card, CardHeader } from '../components/ui/Card'
+import { Avatar } from '../components/ui/Avatar'
 import { Calendar as CalendarView } from '../components/ui/Calendar'
 import { ProgressRing } from '../components/ui/ProgressRing'
 import { Button } from '../components/ui/Modal'
@@ -189,9 +190,7 @@ export function Home() {
           <CardHeader icon={UserIcon} title="我的资料" accent="brand" action={<ChevronRight size={16} className="text-slate-300" />} />
           <div className="px-4 py-4 sm:px-5 sm:py-5">
             <div className="flex items-center gap-3 sm:gap-4">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-3xl bg-brand-100 text-xl shadow-glass sm:h-14 sm:w-14 sm:text-2xl">
-                {data.user.avatar}
-              </div>
+              <Avatar value={data.user.avatar} size={48} className="shadow-glass sm:!h-14 sm:!w-14" />
               <div className="min-w-0">
                 <p className="truncate text-sm font-bold text-slate-800 sm:text-base">{data.user.name}</p>
                 <p className="truncate text-xs text-slate-400">

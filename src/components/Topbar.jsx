@@ -1,6 +1,7 @@
 import { Search, Bell, Menu } from 'lucide-react'
 import { useStore } from '../store/StoreContext'
 import { NAV_ITEMS } from './Sidebar'
+import { Avatar } from './ui/Avatar'
 
 export function Topbar({ onToggleSidebar }) {
   const { activePage, data, openProfile } = useStore()
@@ -47,9 +48,7 @@ export function Topbar({ onToggleSidebar }) {
           className="flex items-center gap-2 rounded-2xl bg-white/80 py-1.5 pl-1.5 pr-2.5 transition hover:bg-slate-100 sm:pr-3"
           aria-label="查看个人资料"
         >
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-brand-100 text-base">
-            {data.user?.avatar || '🙂'}
-          </div>
+          <Avatar value={data.user?.avatar} size={32} />
           {/* Name text hidden on very small screens */}
           <div className="hidden leading-tight text-left xs:block">
             <p className="text-xs font-semibold text-slate-700">{data.user?.name || '同学'}</p>

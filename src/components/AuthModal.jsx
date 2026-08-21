@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { X, LogIn, UserPlus, Eye, EyeOff, Sparkles, AlertCircle } from 'lucide-react'
+import { X, LogIn, UserPlus, Eye, EyeOff, Sparkles, AlertCircle, Upload } from 'lucide-react'
 import { useStore } from '../store/StoreContext'
 import { Button } from './ui/Modal'
+import { Avatar } from './ui/Avatar'
 import { clsx } from '../lib/clsx'
+import { fileToAvatarDataUrl } from '../lib/avatar'
 
 const AVATARS = ['🍊', '🐱', '🐰', '🦊', '🐼', '🌟', '🍎', '🌈', '🐻', '🦄', '🐯', '🌸']
 const GRADES = ['大一', '大二', '大三', '大四', '研究生', '其他']
@@ -86,7 +88,7 @@ export function AuthModal() {
     const p = regForm.password
     const cp = regForm.confirmPassword
     if (!u) { setError('请输入用户名'); return }
-    if (u.length < 2 || u.length > 20) { setError('用户名需 2-20 个字符'); return }
+    if (u.length < 1 || u.length > 20) { setError('用户名需 1-20 个字符'); return }
     if (!p) { setError('请设置密码'); return }
     if (p.length < 4) { setError('密码至少 4 位'); return }
     if (p !== cp) { setError('两次密码不一致'); return }
@@ -114,6 +116,19 @@ export function AuthModal() {
   }
 
   /* ---- Render helpers ---- */
+
+  const handleAvatarUpload = async (e) => {
+    const file = e.target.files && e.target.files[0]
+    if (!file) return
+    try {
+      const dataUrl = await fileToAvatarDataUrl(file)
+      setRegForm({ ...regForm, avatar: dataUrl })
+      setError('')
+    } catch (err) {
+      setError(err.message || '图片读取失败，请换一张')
+    }
+    e.target.value = '' // allow re-selecting the same file
+  }
 
   function inputField(label, value, onChange, opts = {}) {
     const { type = 'text', placeholder, disabled, autoComplete } = opts
@@ -172,8 +187,14 @@ export function AuthModal() {
 
         {/* Header */}
         <div className="px-5 pt-6 pb-2 text-center sm:px-6 sm:pt-7">
-          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-3xl bg-brand-100 text-3xl shadow-glass sm:h-16 sm:w-16 sm:text-4xl">
-            {mode === 'register' ? (regForm.avatar || '🙂') : '🔐'}
+          <div className="mx-auto mb-3">
+            {mode === 'register' ? (
+              <Avatar value={regForm.avatar || '🙂'} size={64} className="shadow-glass" />
+            ) : (
+              <div className="flex h-14 w-14 items-center justify-center rounded-3xl bg-brand-100 text-3xl shadow-glass sm:h-16 sm:w-16 sm:text-4xl">
+                🔐
+              </div>
+            )}
           </div>
           <h2 className="text-lg font-bold text-slate-800 sm:text-xl">
             {mode === 'login' ? '欢迎回来' : mode === 'register' ? '创建账号' : '完善资料'}
@@ -227,7 +248,24 @@ export function AuthModal() {
               {/* Avatar picker row */}
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-slate-600">选择头像</label>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Upload local photo (computer / phone) */}
+                  <label
+                    title="上传本地头像"
+                    className={clsx(
+                      'relative flex h-10 w-10 cursor-pointer items-center justify-center overflow-hidden rounded-xl border border-dashed transition sm:h-11 sm:w-11',
+                      regForm.avatar && regForm.avatar.startsWith('data:')
+                        ? 'border-brand-400 bg-brand-100'
+                        : 'border-brand-300 bg-white text-brand-500 hover:bg-brand-50',
+                    )}
+                  >
+                    {regForm.avatar && regForm.avatar.startsWith('data:') ? (
+                      <img src={regForm.avatar} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <Upload size={16} />
+                    )}
+                    <input type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
+                  </label>
                   {AVATARS.map((a) => (
                     <button
                       key={a}
@@ -247,7 +285,7 @@ export function AuthModal() {
               </div>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                {inputField('用户名 *', regForm.username, (v) => setRegForm({ ...regForm, username: v }), { placeholder: '2-20个字符', autoComplete: 'username' })}
+                {inputField('用户名 *', regForm.username, (v) => setRegForm({ ...regForm, username: v }), { placeholder: '1-20个字符', autoComplete: 'username' })}
                 {inputField('昵称', regForm.name, (v) => setRegForm({ ...regForm, name: v }), { placeholder: '显示名称（可选）', autoComplete: 'nickname' })}
               </div>
 
