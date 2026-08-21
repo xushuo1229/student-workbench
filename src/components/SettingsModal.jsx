@@ -4,42 +4,47 @@ import { useStore } from '../store/StoreContext'
 import { Modal, Button } from './ui/Modal'
 
 /* Convert a local image file into a data URL for background use.
-   Optimized: 1280px max (looks great as bg), 0.65 quality (~50-150KB).
-   Phone photos (4000x3000) process in <500ms instead of 3-5s. */
-function fileToBgDataUrl(file, maxSize = 1280) {
+   Ultra-fast: uses URL.createObjectURL (instant) + canvas.toBlob (async/non-blocking)
+   + small output size (960px max, JPEG 0.5). Phone photos process in ~100-200ms. */
+function fileToBgDataUrl(file, maxSize = 960) {
   return new Promise((resolve, reject) => {
     if (!file) return reject(new Error('未选择文件'))
     if (!file.type || !file.type.startsWith('image/')) return reject(new Error('请选择图片文件'))
 
-    const reader = new FileReader()
-    reader.onerror = () => reject(new Error('读取失败'))
-    reader.onload = () => {
-      const img = new Image()
-      img.onerror = () => reject(new Error('图片解析失败'))
-      img.onload = () => {
-        // Aggressive downscale for speed — background covers the whole screen,
-        // so 1280px on the long edge is more than enough
-        const scale = Math.min(1, maxSize / Math.max(img.width || maxSize, img.height || maxSize))
-        const w = Math.max(1, Math.round((img.width || maxSize) * scale))
-        const h = Math.max(1, Math.round((img.height || maxSize) * scale))
-        const canvas = document.createElement('canvas')
-        canvas.width = w
-        canvas.height = h
-        const ctx = canvas.getContext('2d')
-        // Smooth downscaling
-        ctx.imageSmoothingEnabled = true
-        ctx.imageSmoothingQuality = 'high'
-        ctx.drawImage(img, 0, 0, w, h)
-        try {
-          // Lower quality = much faster encoding + smaller localStorage footprint
-          resolve(canvas.toDataURL('image/jpeg', 0.65))
-        } catch (e) {
-          reject(new Error('编码失败'))
-        }
-      }
-      img.src = reader.result
+    // Step 1: Create object URL — instant (no file reading needed yet)
+    const objectUrl = URL.createObjectURL(file)
+
+    const img = new Image()
+    img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error('图片解析失败')) }
+    img.onload = () => {
+      // Step 2: Downscale aggressively — 960px long edge is plenty for a bg
+      const scale = Math.min(1, maxSize / Math.max(img.width || maxSize, img.height || maxSize))
+      const w = Math.max(1, Math.round((img.width || maxSize) * scale))
+      const h = Math.max(1, Math.round((img.height || maxSize) * scale))
+
+      const canvas = document.createElement('canvas')
+      canvas.width = w
+      canvas.height = h
+      const ctx = canvas.getContext('2d')
+      ctx.drawImage(img, 0, 0, w, h)
+      // Done with image & object URL
+      URL.revokeObjectURL(objectUrl)
+
+      // Step 3: toBlob is ASYNC — does NOT block the UI thread!
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) { reject(new Error('编码失败')); return }
+          // Convert blob → dataURL for localStorage storage
+          const reader = new FileReader()
+          reader.onerror = () => reject(new Error('读取编码结果失败'))
+          reader.onload = () => resolve(reader.result)
+          reader.readAsDataURL(blob)
+        },
+        'image/jpeg',
+        0.5, // Low quality OK for backgrounds; makes encoding much faster
+      )
     }
-    reader.readAsDataURL(file)
+    img.src = objectUrl
   })
 }
 
@@ -102,22 +107,12 @@ export function SettingsModal() {
     const file = e.target.files?.[0]
     if (!file) return
     setUploading(true)
-    setUploadStep('reading')
+    setUploadStep('processing')
     try {
-      // Step 1: Read file (FileReader)
-      await new Promise((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onerror = () => reject(new Error('读取失败'))
-        reader.onload = resolve
-        reader.readAsDataURL(file)
-      })
-
-      setUploadStep('processing')
-      // Step 2: Process image (downscale + encode)
+      // fileToBgDataUrl now uses URL.createObjectURL (instant) + toBlob (async, non-blocking)
       const dataUrl = await fileToBgDataUrl(file)
 
       setUploadStep('saving')
-      // Step 3: Save to state
       setBgPreview(dataUrl)
       updateSettings({ backgroundImage: dataUrl })
     } catch (err) {
@@ -125,14 +120,12 @@ export function SettingsModal() {
     } finally {
       setUploading(false)
       setUploadStep('')
-      // Reset input so same file can be re-selected
       if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }
 
   /* Upload step labels */
   const uploadLabels = {
-    reading: '⏳ 读取文件中…',
     processing: '🖼️ 压缩图片中…',
     saving: '💾 保存设置中…',
   }
@@ -215,7 +208,7 @@ export function SettingsModal() {
               <Upload size={16} />
               {getUploadText()}
             </Button>
-            <p className="mt-1.5 text-[11px] text-slate-400">支持 JPG、PNG、WebP，建议尺寸 ≥ 1280×720</p>
+            <p className="mt-1.5 text-[11px] text-slate-400">支持 JPG、PNG、WebP，自动压缩优化</p>
           </div>
 
           {/* Preset gradients */}
