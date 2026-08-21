@@ -36,6 +36,48 @@ body{font-family:var(--font-display);background:var(--bg-0);color:var(--text-1);
 @keyframes drift3{to{transform:translate(6vw,-8vh) scale(.9)}}
 .grain{position:fixed;inset:0;z-index:40;pointer-events:none;opacity:.05;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E")}
 .gridline{position:fixed;inset:0;z-index:-2;pointer-events:none;background-image:linear-gradient(rgba(255,255,255,.022) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.022) 1px,transparent 1px);background-size:56px 56px;mask-image:radial-gradient(ellipse 90% 70% at 50% 0%,#000 30%,transparent 78%)}
+
+/* ============================================================
+   科技风 HUD 背景（半透明）
+   ============================================================ */
+.tech-bg{position:fixed;inset:0;z-index:-1;pointer-events:none;overflow:hidden}
+.tech-bg .dotgrid{position:absolute;inset:0;background-image:radial-gradient(circle,rgba(92,200,178,.18) 1px,transparent 1.5px);background-size:32px 32px;mask-image:radial-gradient(ellipse 80% 70% at 50% 50%,#000 30%,transparent 85%);opacity:.55}
+.tech-bg .scanline{position:absolute;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent 0%,rgba(92,200,178,0) 5%,rgba(92,200,178,.6) 50%,rgba(92,200,178,0) 95%,transparent 100%);filter:blur(.5px);animation:scan 8s linear infinite;top:0;opacity:.7}
+@keyframes scan{0%{transform:translateY(-2vh)}100%{transform:translateY(102vh)}}
+.tech-bg .corner{position:absolute;width:74px;height:74px}
+.tech-bg .corner svg{width:100%;height:100%;stroke:rgba(92,200,178,.32);stroke-width:1.3;fill:none;stroke-linecap:round}
+.tech-bg .corner.tl{top:18px;left:18px}
+.tech-bg .corner.tr{top:18px;right:18px;transform:scaleX(-1)}
+.tech-bg .corner.bl{bottom:18px;left:18px;transform:scaleY(-1)}
+.tech-bg .corner.br{bottom:18px;right:18px;transform:scale(-1,-1)}
+.tech-bg .corner::after{content:attr(data-l);position:absolute;font-family:var(--font-num);font-size:10px;color:rgba(92,200,178,.55);letter-spacing:1.5px;white-space:nowrap;font-weight:600}
+.tech-bg .corner.tl::after{content:"SYS · ONLINE";top:82px;left:0}
+.tech-bg .corner.tr::after{content:"LOCAL · 2026.08.21";top:82px;right:0}
+.tech-bg .corner.bl::after{content:"USER · AUTHENTICATED";bottom:82px;left:0}
+.tech-bg .corner.br::after{content:"DATA · LOCAL";bottom:82px;right:0}
+.tech-bg .radar{position:absolute;right:-80px;top:40%;width:520px;height:520px;opacity:.4;animation:radar-spin 22s linear infinite}
+@keyframes radar-spin{to{transform:rotate(360deg)}}
+.tech-bg .radar svg{width:100%;height:100%}
+.tech-bg .radar .sweep{transform-origin:center;animation:sweep 3.6s linear infinite}
+@keyframes sweep{0%{transform:rotate(0)}100%{transform:rotate(360deg)}}
+.tech-bg .bars{position:absolute;left:24px;bottom:120px;display:flex;gap:4px;align-items:flex-end;height:34px;opacity:.55}
+.tech-bg .bars i{display:block;width:3px;background:linear-gradient(180deg,rgba(92,200,178,.85),rgba(92,200,178,.15));border-radius:2px;animation:bar 1.2s ease-in-out infinite}
+@keyframes bar{0%,100%{height:6px}50%{height:34px}}
+.tech-bg .bars i:nth-child(1){animation-delay:0s}
+.tech-bg .bars i:nth-child(2){animation-delay:.12s}
+.tech-bg .bars i:nth-child(3){animation-delay:.24s}
+.tech-bg .bars i:nth-child(4){animation-delay:.36s}
+.tech-bg .bars i:nth-child(5){animation-delay:.48s}
+.tech-bg .bars i:nth-child(6){animation-delay:.6s}
+.tech-bg .bars i:nth-child(7){animation-delay:.72s}
+.tech-bg .bars i:nth-child(8){animation-delay:.84s}
+.tech-bg .bars i:nth-child(9){animation-delay:.96s}
+.tech-bg .bars i:nth-child(10){animation-delay:1.08s}
+.tech-bg .datatext{position:absolute;right:24px;bottom:120px;font-family:var(--font-num);font-size:10.5px;color:rgba(92,200,178,.55);letter-spacing:1.5px;text-align:right;line-height:1.7;font-weight:500;user-select:none}
+.tech-bg .datatext b{color:rgba(92,200,178,.85);font-weight:700}
+.tech-bg .datatext .blink{animation:blink 1.4s steps(2) infinite}
+@keyframes blink{50%{opacity:0}}
+@media (max-width:760px){.tech-bg .corner,.tech-bg .radar,.tech-bg .bars,.tech-bg .datatext{display:none}}
 .wrap{max-width:1240px;margin:0 auto;padding:var(--s6) clamp(16px,4vw,40px) var(--s16)}
 .topbar{display:flex;align-items:center;justify-content:space-between;gap:var(--s4);padding:var(--s4) 0 var(--s8)}
 .brand{display:flex;align-items:center;gap:var(--s3);text-decoration:none;color:var(--text-1)}
@@ -49,7 +91,8 @@ body{font-family:var(--font-display);background:var(--bg-0);color:var(--text-1);
 .topbar-right{display:flex;align-items:center;gap:var(--s3)}
 .chip-user{display:inline-flex;align-items:center;gap:8px;padding:7px 14px;border:1px solid var(--line);border-radius:var(--r-full);background:rgba(255,255,255,.03);font-size:13px;color:var(--text-2);white-space:nowrap}
 .chip-user b{color:var(--text-1);font-weight:600}
-.chip-user .ava{width:22px;height:22px;border-radius:50%;background:linear-gradient(135deg,#ffd9a8,#f0a05a);display:grid;place-items:center;font-size:13px}
+.chip-user .ava{width:22px;height:22px;border-radius:50%;background:linear-gradient(135deg,#ffd9a8,#f0a05a);display:grid;place-items:center;font-size:13px;position:relative;overflow:hidden}
+.chip-user .ava.has-image{background:transparent;box-shadow:0 0 0 1px rgba(255,255,255,.1)}
 .btn{display:inline-flex;align-items:center;gap:8px;padding:11px 22px;border-radius:var(--r-full);font-size:14px;font-weight:600;letter-spacing:.3px;cursor:pointer;border:none;text-decoration:none;font-family:var(--font-display);transition:transform var(--t-fast) var(--ease-out-quart),box-shadow var(--t-fast),filter var(--t-fast)}
 .btn:active{transform:translateY(1px) scale(.98)}
 .btn svg{width:15px;height:15px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
@@ -88,7 +131,8 @@ body{font-family:var(--font-display);background:var(--bg-0);color:var(--text-1);
 .hero-ring .num b{display:block;font-family:var(--font-num);font-size:34px;font-weight:700;font-variant-numeric:tabular-nums}
 .hero-ring .num small{font-size:11px;color:var(--text-3);letter-spacing:1.5px}
 .profile{text-align:center;padding:var(--s8) var(--s6) var(--s6)}
-.profile-avatar{width:86px;height:86px;margin:0 auto var(--s4);border-radius:28px;background:linear-gradient(135deg,#ffd9a8,#f0a05a 60%,#e8734f);display:grid;place-items:center;font-size:44px;box-shadow:0 18px 40px -12px rgba(240,160,90,.55);position:relative;transition:transform var(--t-med) var(--ease-out-expo)}
+.profile-avatar{width:86px;height:86px;margin:0 auto var(--s4);border-radius:28px;background:linear-gradient(135deg,#ffd9a8,#f0a05a 60%,#e8734f);display:grid;place-items:center;font-size:44px;box-shadow:0 18px 40px -12px rgba(240,160,90,.55);position:relative;transition:transform var(--t-med) var(--ease-out-expo);overflow:hidden}
+.profile-avatar.has-image{background:transparent;box-shadow:0 18px 40px -12px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.08) inset}
 .card:hover .profile-avatar{transform:scale(1.06) rotate(-3deg)}
 .profile-avatar::after{content:"✦";position:absolute;top:-9px;right:-9px;width:26px;height:26px;border-radius:50%;background:var(--bg-1);border:1px solid var(--line-strong);display:grid;place-items:center;font-size:12px;color:var(--amber)}
 .profile-avatar > img,.chip-user .ava > img,.modal-preview > img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit;display:none}
@@ -221,6 +265,43 @@ body{font-family:var(--font-display);background:var(--bg-0);color:var(--text-1);
 <div class="aurora" aria-hidden="true"><i class="a1"></i><i class="a2"></i><i class="a3"></i></div>
 <div class="gridline" aria-hidden="true"></div>
 <div class="grain" aria-hidden="true"></div>
+<div class="tech-bg" aria-hidden="true">
+  <div class="dotgrid"></div>
+  <div class="scanline"></div>
+  <div class="corner tl"><svg viewBox="0 0 64 64"><path d="M2 22 V2 H22"/><circle cx="2" cy="2" r="2.4" fill="rgba(92,200,178,.5)" stroke="none"/><path d="M10 2 H18"/></svg></div>
+  <div class="corner tr"><svg viewBox="0 0 64 64"><path d="M2 22 V2 H22"/><circle cx="2" cy="2" r="2.4" fill="rgba(92,200,178,.5)" stroke="none"/><path d="M10 2 H18"/></svg></div>
+  <div class="corner bl"><svg viewBox="0 0 64 64"><path d="M2 22 V2 H22"/><circle cx="2" cy="2" r="2.4" fill="rgba(92,200,178,.5)" stroke="none"/><path d="M10 2 H18"/></svg></div>
+  <div class="corner br"><svg viewBox="0 0 64 64"><path d="M2 22 V2 H22"/><circle cx="2" cy="2" r="2.4" fill="rgba(92,200,178,.5)" stroke="none"/><path d="M10 2 H18"/></svg></div>
+  <div class="radar">
+    <svg viewBox="0 0 520 520" fill="none" stroke="rgba(92,200,178,.35)">
+      <circle cx="260" cy="260" r="240" stroke-width="1" stroke-dasharray="2 6"/>
+      <circle cx="260" cy="260" r="180" stroke-width=".7" stroke-dasharray="1 4"/>
+      <circle cx="260" cy="260" r="120" stroke-width=".7" stroke-dasharray="1 4"/>
+      <circle cx="260" cy="260" r="60" stroke-width="1"/>
+      <line x1="260" y1="20" x2="260" y2="500" stroke-width=".5"/>
+      <line x1="20" y1="260" x2="500" y2="260" stroke-width=".5"/>
+      <g class="sweep">
+        <path d="M260 260 L260 20 A240 240 0 0 1 460 360 Z" fill="url(#radarGrad)" stroke="none"/>
+      </g>
+      <defs>
+        <radialGradient id="radarGrad" cx=".5" cy=".5" r=".5">
+          <stop offset="0" stop-color="rgba(92,200,178,.35)"/>
+          <stop offset="1" stop-color="rgba(92,200,178,0)"/>
+        </radialGradient>
+      </defs>
+    </svg>
+  </div>
+  <div class="bars" aria-hidden="true">
+    <i style="height:6px"></i><i style="height:6px"></i><i style="height:6px"></i><i style="height:6px"></i><i style="height:6px"></i>
+    <i style="height:6px"></i><i style="height:6px"></i><i style="height:6px"></i><i style="height:6px"></i><i style="height:6px"></i>
+  </div>
+  <div class="datatext">
+    <div>LAT <b>34.7466°</b> N</div>
+    <div>LON <b>113.6253°</b> E</div>
+    <div>NODE <b>SG-09</b></div>
+    <div>SESSION <b class="blink">●</b> <b>ACTIVE</b></div>
+  </div>
+</div>
 <svg width="0" height="0" style="position:absolute">
   <defs>
     <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
