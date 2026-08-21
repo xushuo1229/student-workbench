@@ -4,8 +4,31 @@ import { initialData } from '../data/initialData'
 import { uid } from '../lib/format'
 
 const STORAGE_KEY = 'student-workbench-v1'
+const ACCOUNTS_KEY = 'student-workbench-accounts'
 const StoreContext = createContext(null)
 
+/* ---- Account storage (separate from app data) ---- */
+function loadAccounts() {
+  try {
+    const raw = localStorage.getItem(ACCOUNTS_KEY)
+    if (raw) return JSON.parse(raw)
+  } catch (e) { /* ignore */ }
+  return {}
+}
+
+function saveAccounts(accounts) {
+  try { localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts)) } catch (e) { /* ignore */ }
+}
+
+/* Hash password using SHA-256 (same as AuthModal) */
+async function hashPassword(password) {
+  const encoder = new TextEncoder()
+  const data = encoder.encode(password + '_swb_salt_v1')
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+  return Array.from(new Uint8Array(hashBuffer)).map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+/* ---- App data loader ---- */
 function loadData() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
@@ -170,19 +193,80 @@ export function StoreProvider({ children }) {
     pushToast('已恢复示例数据')
   }, [pushToast])
 
-  /* ---------------- User / Login ---------------- */
+  /* ---------------- Auth: Register (username + password) ---------------- */
+  const registerUser = useCallback(async (username, password, profile) => {
+    const accounts = loadAccounts()
+    if (accounts[username]) return false // username taken
+
+    const hashedPassword = await hashPassword(password)
+    accounts[username] = {
+      passwordHash: hashedPassword,
+      profile: {
+        name: profile.name || username,
+        avatar: profile.avatar || '🍊',
+        grade: profile.grade || '',
+        major: profile.major || '',
+        school: profile.school || '',
+        motto: profile.motto || '',
+      },
+      createdAt: new Date().toISOString(),
+    }
+    saveAccounts(accounts)
+
+    // Auto-login after registration
+    setData((d) => ({
+      ...d,
+      isLoggedIn: true,
+      currentUser: username,
+      user: { ...accounts[username].profile },
+    }))
+    return true
+  }, [])
+
+  /* ---------------- Auth: Login (username + password) ---------------- */
+  const loginUserWithPassword = useCallback(async (username, password) => {
+    const accounts = loadAccounts()
+    const account = accounts[username]
+    if (!account) return false
+
+    const hashedInput = await hashPassword(password)
+    if (hashedInput !== account.passwordHash) return false
+
+    // Login success — load this user's profile into app state
+    setData((d) => ({
+      ...d,
+      isLoggedIn: true,
+      currentUser: username,
+      user: { ...account.profile },
+    }))
+    return true
+  }, [])
+
+  /* ---------------- User Profile (post-login editing) ---------------- */
   const loginUser = useCallback((profile) => {
+    // Legacy: direct profile set (used by old login flow, kept for compat)
     setData((d) => ({ ...d, isLoggedIn: true, user: { ...d.user, ...profile } }))
     pushToast('欢迎回来，开始今日成长 🎉')
   }, [pushToast])
 
   const updateUser = useCallback((patch) => {
-    setData((d) => ({ ...d, user: { ...d.user, ...patch } }))
+    setData((d) => {
+      const newUser = { ...d.user, ...patch }
+      // Also sync back to account storage if logged in via username
+      if (d.currentUser) {
+        const accounts = loadAccounts()
+        if (accounts[d.currentUser]) {
+          accounts[d.currentUser].profile = newUser
+          saveAccounts(accounts)
+        }
+      }
+      return { ...d, user: newUser }
+    })
     pushToast('资料已更新')
   }, [pushToast])
 
   const logoutUser = useCallback(() => {
-    setData((d) => ({ ...d, isLoggedIn: false }))
+    setData((d) => ({ ...d, isLoggedIn: false, currentUser: '' }))
     setProfileOpen(false)
     pushToast('已退出登录')
   }, [pushToast])
@@ -196,10 +280,12 @@ export function StoreProvider({ children }) {
     setActivePage,
     toasts,
     pushToast,
-    // user / login
+    // user / auth
     profileOpen,
     openProfile,
     closeProfile,
+    registerUser,
+    loginUserWithPassword,
     loginUser,
     updateUser,
     logoutUser,

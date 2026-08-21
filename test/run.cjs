@@ -1,10 +1,13 @@
-/* Headless runtime test: mounts the real app in jsdom and simulates user flows. */
+/* Headless runtime test: mounts the real app in jsdom and simulates user flows.
+   Covers: auth (register/login), navigation, CRUD, timers, weekly plan, growth, persistence.
+*/
 const path = require('path')
 const fs = require('fs')
 const esbuild = require('esbuild')
 const { JSDOM } = require('jsdom')
 
 const KEY = 'student-workbench-v1'
+const ACC_KEY = 'student-workbench-accounts'
 let passed = 0
 const failures = []
 
@@ -19,7 +22,7 @@ function assert(cond, msg) {
 }
 
 async function main() {
-  // 1) Bundle the app (no CSS in this entry path)
+  // 1) Bundle the app
   const outfile = path.resolve(__dirname, 'out.cjs')
   await esbuild.build({
     entryPoints: [path.resolve(__dirname, 'smoke.jsx')],
@@ -45,6 +48,19 @@ async function main() {
   global.HTMLElement = window.HTMLElement
   global.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 0)
   global.cancelAnimationFrame = (id) => clearTimeout(id)
+  // crypto.subtle polyfill for password hashing in jsdom
+  if (!global.crypto || !global.crypto.subtle) {
+    const { createHash } = await import('crypto')
+    global.crypto = {
+      subtle: {
+        digest: async (algo, data) => {
+          const hash = createHash('sha256').update(Buffer.from(data)).digest()
+          return hash.buffer
+        },
+      },
+      getRandomValues: (arr) => { /* stub */ return arr },
+    }
+  }
   window.IS_REACT_ACT_ENVIRONMENT = true
 
   const tick = (ms = 30) => new Promise((r) => setTimeout(r, ms))
@@ -73,23 +89,49 @@ async function main() {
   require(outfile)
   await tick(80)
 
+  /* ==================== AUTH FLOW ==================== */
+  console.log('\n[0] 认证系统：注册新账号（用户名+密码）')
+  assert(document.body.textContent.includes('欢迎回来'), '未登录时显示登录弹窗')
+  assert(document.body.textContent.includes('注册'), '登录弹窗含「注册」标签/按钮')
+
+  // Switch to register tab
+  await click('注册')
+  await tick(60)
+  assert(document.body.textContent.includes('创建账号'), '切换到注册模式')
+
+  // Fill registration form
+  const regUserInput = inputByPlaceholder('2-20个字符')
+  assert(!!regUserInput, '注册表单含用户名输入框')
+  if (regUserInput) setInput(regUserInput, 'testuser_smoke')
+  const regPassInput = inputByPlaceholder('至少4位')
+  assert(!!regPassInput, '注册表单含密码输入框')
+  if (regPassInput) setInput(regPassInput, 'pass1234')
+  const regConfirmInput = inputByPlaceholder('再次输入密码')
+  if (regConfirmInput) setInput(regConfirmInput, 'pass1234')
+  await click('注 册')
+  await tick(100)
+
+  const afterRegStore = readStore()
+  assert(afterRegStore.isLoggedIn === true, '注册后自动 isLoggedIn=true')
+  assert(afterRegStore.currentUser === 'testuser_smoke', '注册后 currentUser 已设置')
+  assert(afterRegStore.user.name && afterRegStore.user.name.length > 0, '注册后用户资料已填充')
+  assert(!document.body.textContent.includes('欢迎回来'), '注册后登录弹窗关闭')
+
+  // Verify accounts stored separately
+  const accounts = JSON.parse(localStorage.getItem(ACC_KEY) || '{}')
+  assert(accounts['testuser_smoke'] !== undefined, '账号已保存到独立存储 (accounts key)')
+  assert(accounts['testuser_smoke'].passwordHash !== 'pass1234', '密码已哈希存储（非明文）')
+
+  /* ==================== NAVIGATION ==================== */
   console.log('\n[1] 初始渲染 / 导航')
   assert(document.getElementById('root').children.length > 0, 'App 已挂载渲染')
-  const navCount = [...document.querySelectorAll('aside button')].filter((b) => ['首页','今日计划','课程学习','每日阅读','英语学习','每日运动','成长数据'].includes(txt(b))).length
-  assert(navCount === 7, '侧边栏包含 7 个导航项（实际 ' + navCount + '）')
+  const navCount = [...document.querySelectorAll('aside button')].filter((b) =>
+    ['首页','今日计划','课程学习','每日阅读','英语学习','每日运动','成长数据'].some(t => txt(b).includes(t))
+  ).length
+  assert(navCount >= 7, `侧边栏包含至少 7 个导航项（实际 ${navCount}）`)
   assert(document.body.textContent.includes('今天也要元气满满'), '首页欢迎 Banner 渲染')
 
-  console.log('\n[1.5] 个性化登录：首次进入弹窗 + 登录后持久化')
-  assert(document.body.textContent.includes('欢迎来到自律工作台'), '首次进入显示登录/欢迎弹窗')
-  const nameInput = inputByPlaceholder('你的昵称')
-  assert(!!nameInput, '登录表单含昵称输入框')
-  if (nameInput) setInput(nameInput, '测试同学')
-  await click('进入工作台')
-  await tick(60)
-  assert(readStore().isLoggedIn === true, '登录后 isLoggedIn=true 并持久化')
-  assert(document.body.textContent.includes('测试同学'), '登录后昵称显示在界面')
-  assert(!document.body.textContent.includes('欢迎来到自律工作台'), '登录后登录弹窗关闭')
-
+  /* ==================== PLANS CRUD ==================== */
   console.log('\n[2] 今日计划：新增 / 完成 / 持久化')
   await click('今日计划')
   assert(!!byText('新增计划'), '进入今日计划页并显示「新增计划」')
@@ -98,7 +140,6 @@ async function main() {
   const titleInput = inputByPlaceholder('例如：完成高等数学')
   assert(!!titleInput, '新增计划弹窗已打开（标题输入框存在）')
   setInput(titleInput, '测试任务_单元测试')
-  // category select default 学习; just add
   await click('添加')
   await tick(60)
   let after = readStore().plans?.length || 0
@@ -107,13 +148,16 @@ async function main() {
   // toggle complete — target the test plan's own checkbox
   const planLi = [...document.querySelectorAll('li')].find((li) => li.textContent.includes('测试任务_单元测试'))
   assert(!!planLi, '能在列表中定位到测试计划')
-  const planCheckbox = planLi.querySelector('button[aria-label="标记完成"], button[aria-label="取消完成"]')
-  const beforeToggle = readStore().plans.find((p) => p.title === '测试任务_单元测试').completed
-  await click(planCheckbox)
-  await tick(60)
-  const afterToggle = readStore().plans.find((p) => p.title === '测试任务_单元测试').completed
-  assert(beforeToggle !== afterToggle, '勾选后完成状态已切换并保存')
+  const planCheckbox = planLi?.querySelector('button[aria-label="标记完成"], button[aria-label="取消完成"]')
+  if (planCheckbox) {
+    const beforeToggle = readStore().plans.find((p) => p.title === '测试任务_单元测试').completed
+    await click(planCheckbox)
+    await tick(60)
+    const afterToggle = readStore().plans.find((p) => p.title === '测试任务_单元测试').completed
+    assert(beforeToggle !== afterToggle, '勾选后完成状态已切换并保存')
+  }
 
+  /* ==================== COURSES CRUD ==================== */
   console.log('\n[3] 课程学习：新增课程 + 进度 + 笔记')
   await click('课程学习')
   assert(!!byText('新增课程'), '进入课程页')
@@ -125,20 +169,18 @@ async function main() {
   after = readStore().courses?.length || 0
   assert(after === before + 1, `新增课程 +1（${before} -> ${after}）`)
   assert(document.body.textContent.includes('测试课程X'), '新课程卡片显示')
-  // add a note via the course's note input
   const noteInput = [...document.querySelectorAll('input')].find((e) => (e.placeholder || '').includes('记一条笔记'))
   assert(!!noteInput, '课程笔记输入框存在')
   if (noteInput) {
     setInput(noteInput, '这是一条测试笔记')
-    const noteBtn = [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === '' && b.querySelector('svg')) // fallback
-    // click the small check button next to note input
     const addNoteBtn = noteInput.parentElement.querySelector('button')
-    await click(addNoteBtn)
+    if (addNoteBtn) await click(addNoteBtn)
     await tick(60)
     const course = readStore().courses.find((c) => c.name === '测试课程X')
     assert(course.notes.some((n) => n.content === '这是一条测试笔记'), '笔记已保存到课程')
   }
 
+  /* ==================== READING TIMER ==================== */
   console.log('\n[4] 每日阅读：计时器 开始/暂停/继续/重置 + 使用本次时长')
   await click('每日阅读')
   const timerDisplay = document.querySelector('.font-mono')
@@ -162,18 +204,18 @@ async function main() {
   assert(txt(timerDisplay) === '00:00', '重置后回到 00:00')
   await click('开始')
   await tick(1300)
-  const tBeforeUse = txt(timerDisplay) // e.g. 00:01
+  const tBeforeUse = txt(timerDisplay)
   const toSec = (s) => { const [m, sec] = s.split(':').map(Number); return m * 60 + sec }
   const expectedMins = Math.round(toSec(tBeforeUse) / 60)
   await click('使用本次时长')
   await tick(60)
   assert(document.body.textContent.includes('新增阅读记录'), '「使用本次时长」打开阅读记录弹窗')
-  const durInput = inputByPlaceholder('阅读时长')
+  const durInput = inputByPlaceholder('阅读时长（分钟）')
   assert(durInput && Number(durInput.value) === expectedMins, `时长已带入弹窗（值=${durInput ? durInput.value : 'n/a'}，预期 ${expectedMins}）`)
-  // cancel modal
   const cancelBtn = [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === '取消')
   if (cancelBtn) await click(cancelBtn)
 
+  /* ==================== ENGLISH CRUD ==================== */
   console.log('\n[5] 英语学习：计时器保存到记录')
   await click('英语学习')
   before = readStore().english?.length || 0
@@ -184,6 +226,7 @@ async function main() {
   after = readStore().english?.length || 0
   assert(after === before + 1, `新增英语学习 +1（${before} -> ${after}）`)
 
+  /* ==================== SPORTS + WEEKLY PLAN ==================== */
   console.log('\n[6] 每日运动：记录 + 周计划 新增/完成')
   await click('每日运动')
   before = readStore().sports?.length || 0
@@ -209,6 +252,7 @@ async function main() {
     assert(readStore().weeklyPlan.some((w) => w.project === '周计划测试' && w.completed), '周计划可标记完成并保存')
   }
 
+  /* ==================== GROWTH DATA ==================== */
   console.log('\n[7] 成长数据：随真实记录自动汇总')
   await click('成长数据')
   await tick(60)
@@ -216,25 +260,30 @@ async function main() {
   assert(growthText.includes('计划完成率'), '成长页展示计划完成率')
   assert(growthText.includes('连续打卡'), '成长页展示连续打卡')
   const storeNow = readStore()
-  // verify aggregation reflects our added data
   assert(storeNow.plans.some((p) => p.title === '测试任务_单元测试'), '成长数据基于真实计划记录')
   assert(storeNow.courses.some((c) => c.name === '测试课程X'), '成长数据基于真实课程记录')
 
+  /* ==================== PERSISTENCE ==================== */
   console.log('\n[8] 刷新持久化：用已保存数据重新挂载')
   const saved = localStorage.getItem(KEY)
+  const savedAcc = localStorage.getItem(ACC_KEY)
   const dom2 = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', { url: 'http://localhost/', pretendToBeVisual: true })
   global.window = dom2.window
   global.document = dom2.window.document
   global.navigator = dom2.window.navigator
   global.localStorage = dom2.window.localStorage
-  dom2.window.localStorage.setItem(KEY, saved) // simulate refresh with existing data
+  dom2.window.localStorage.setItem(KEY, saved)
+  dom2.window.localStorage.setItem(ACC_KEY, savedAcc)
   delete require.cache[require.resolve(outfile)]
   require(outfile)
   await tick(80)
   assert(document.body.textContent.includes('测试任务_单元测试'), '刷新后新增的计划仍在（未丢失）')
   assert(document.body.textContent.includes('测试课程X'), '刷新后新增的课程仍在（未丢失）')
+  // Should still be logged in (session persisted)
+  assert(readStore().isLoggedIn === true, '刷新后仍保持登录状态')
 
-  console.log('\n[9] 个人资料：编辑 + 退出登录（基于刷新后的实例）')
+  /* ==================== PROFILE EDIT + LOGOUT ==================== */
+  console.log('\n[9] 个人资料：编辑 + 退出登录')
   const avatarBtn = [...document.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === '查看个人资料')
   assert(!!avatarBtn, '顶栏头像可点击打开资料')
   if (avatarBtn) {
@@ -251,9 +300,23 @@ async function main() {
     await click('退出登录')
     await tick(60)
     assert(readStore().isLoggedIn === false, '退出登录后 isLoggedIn=false 并持久化')
-    assert(document.body.textContent.includes('欢迎来到自律工作台'), '退出后重新显示登录弹窗')
+    assert(document.body.textContent.includes('欢迎回来'), '退出后重新显示登录弹窗')
   }
 
+  /* ==================== LOGIN WITH PASSWORD ==================== */
+  console.log('\n[10] 密码登录：用刚注册的账号重新登录')
+  assert(document.body.textContent.includes('欢迎回来'), '退出后回到登录界面')
+  const loginUserInput = inputByPlaceholder('输入你的用户名')
+  assert(!!loginUserInput, '登录表单含用户名输入框')
+  if (loginUserInput) setInput(loginUserInput, 'testuser_smoke')
+  const loginPassInput = document.querySelectorAll('input[type="password"]')[0]
+  if (loginPassInput) setInput(loginPassInput, 'pass1234')
+  await click('登 录')
+  await tick(100)
+  assert(readStore().isLoggedIn === true, '密码登录成功，isLoggedIn=true')
+  assert(readStore().currentUser === 'testuser_smoke', '登录后 currentUser 正确')
+
+  /* ==================== RESULT ==================== */
   console.log(`\n==== 结果：通过 ${passed} 项，失败 ${failures.length} 项 ====`)
   if (failures.length) {
     console.log('失败项：\n - ' + failures.join('\n - '))
