@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>登录 · 晨光自律台</title>
+<meta name="description" content="欢迎回到晨光自律台——在安静里，遇见更好的自己。">
+<style>
+/* ============================================================
+   晨光自律台 · 登录页设计系统（与主站同一套令牌）
+   动态背景：图书馆 · 一个人安静看书
+   ============================================================ */
+:root{
+  --bg-0:#0d1016;--bg-1:#11151d;--bg-2:#171c26;
+  --line:rgba(255,255,255,.07);--line-strong:rgba(255,255,255,.13);
+  --amber:#f0b25c;--coral:#f07a5a;--teal:#5cc8b2;--sky:#7ba7d9;--rose:#f26d85;
+  --grad-amber:linear-gradient(135deg,#f5c06a 0%,#f0975a 48%,#f07a5a 100%);
+  --text-1:#f4f1ea;--text-2:#a8b0bd;--text-3:#6d7684;
+  --ok:#58b892;--err:#ef7a72;
+  --font-display:"HarmonyOS Sans SC","MiSans","PingFang SC","Microsoft YaHei UI","Microsoft YaHei",system-ui,sans-serif;
+  --ease-out-quart:cubic-bezier(.25,1,.5,1);--ease-out-expo:cubic-bezier(.16,1,.3,1);
+  --t-fast:.18s;--t-med:.45s;--t-slow:.9s;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+  font-family:var(--font-display);background:var(--bg-0);color:var(--text-1);
+  min-height:100vh;overflow-x:hidden;line-height:1.6;-webkit-font-smoothing:antialiased;
+}
+
+/* 环境层 */
+.aurora{position:fixed;inset:0;z-index:-3;overflow:hidden;pointer-events:none}
+.aurora i{position:absolute;border-radius:50%;filter:blur(90px);will-change:transform}
+.aurora .a1{width:46vw;height:46vw;left:-14vw;top:-18vw;background:radial-gradient(circle,rgba(240,178,92,.30),transparent 65%);animation:drift1 36s ease-in-out infinite alternate}
+.aurora .a2{width:36vw;height:36vw;right:-12vw;top:4vh;background:radial-gradient(circle,rgba(92,200,178,.14),transparent 65%);animation:drift2 44s ease-in-out infinite alternate}
+@keyframes drift1{to{transform:translate(9vw,7vh) scale(1.14)}}
+@keyframes drift2{to{transform:translate(-8vw,10vh) scale(1.2)}}
+.grain{position:fixed;inset:0;z-index:40;pointer-events:none;opacity:.05;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+}
+
+/* ============================================================
+   登录页双栏布局
+   ============================================================ */
+.login-wrap{display:grid;grid-template-columns:1.15fr 1fr;min-height:100vh;position:relative}
+
+/* ---------- 左：图书馆动态场景 ---------- */
+.scene-panel{position:relative;overflow:hidden;display:flex;align-items:flex-end;
+  background:linear-gradient(180deg,#100d16 0%,#0d1016 100%)}
+.scene{position:absolute;inset:0;display:grid;place-items:center}
+.scene svg{width:min(660px,92%);height:auto;max-height:96vh}
+.scene-caption{position:relative;z-index:2;padding:clamp(20px,3vw,40px);color:var(--text-2);font-size:13.5px;letter-spacing:1px;line-height:1.9;
+  border-left:2px solid var(--grad-amber);background:linear-gradient(90deg,rgba(13,16,22,.7),transparent 70%);margin:0 auto clamp(24px,4vh,56px) clamp(20px,3vw,40px);max-width:34ch}
+.scene-caption b{color:var(--amber);font-weight:600}
+.scene-caption::before{content:"“";font-size:30px;color:var(--amber);font-family:serif;position:absolute;left:-12px;top:-6px;opacity:.6}
+
+/* SVG 场景动画 */
+.sc-g{transform-box:fill-box}
+.star{animation:twinkle 3.4s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
+@keyframes twinkle{0%,100%{opacity:.25}50%{opacity:1}}
+.dust{animation:rise linear infinite;transform-box:fill-box}
+@keyframes rise{0%{transform:translateY(14px);opacity:0}12%{opacity:.75}88%{opacity:.5}100%{transform:translateY(-46px);opacity:0}}
+.lamp-glow{animation:glow-breathe 5.2s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
+@keyframes glow-breathe{0%,100%{opacity:.42;transform:scale(1)}50%{opacity:.62;transform:scale(1.05)}}
+.person-breathe{animation:breathe 5.6s ease-in-out infinite;transform-box:fill-box}
+@keyframes breathe{0%,100%{transform:translateY(0)}50%{transform:translateY(-3.5px)}}
+.moon-ray{animation:moon-glow 7s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
+@keyframes moon-glow{0%,100%{opacity:.35}50%{opacity:.55}}
+.book-page-l{animation:page-l 4.6s ease-in-out infinite;transform-box:fill-box;transform-origin:right center;backface-visibility:hidden}
+@keyframes page-l{0%,30%{transform:rotateY(0)}62%,100%{transform:rotateY(178deg)}}
+.book-page-r{animation:page-r 4.6s ease-in-out infinite;transform-box:fill-box;transform-origin:left center;backface-visibility:hidden}
+@keyframes page-r{0%,30%{transform:rotateY(0)}62%,100%{transform:rotateY(-178deg)}}
+.lamp-sway{animation:sway 7s ease-in-out infinite;transform-box:fill-box;transform-origin:50% 0}
+@keyframes sway{0%,100%{transform:rotate(0)}50%{transform:rotate(1.6deg)}}
+
+/* ---------- 右：登录表单 ---------- */
+.form-panel{display:flex;flex-direction:column;justify-content:center;padding:clamp(28px,5vw,72px);position:relative;z-index:2;
+  background:linear-gradient(180deg,rgba(17,21,29,.72),rgba(13,16,22,.88));backdrop-filter:blur(6px)}
+.form-inner{max-width:400px;width:100%;margin:0 auto}
+
+.brand{display:inline-flex;align-items:center;gap:12px;text-decoration:none;color:var(--text-1);margin-bottom:var(--s8,44px)}
+.brand-mark{width:42px;height:42px;border-radius:13px;background:var(--grad-amber);display:grid;place-items:center;position:relative;overflow:hidden;box-shadow:0 8px 22px -6px rgba(240,151,90,.5)}
+.brand-mark::after{content:"";position:absolute;inset:0;background:linear-gradient(120deg,transparent 30%,rgba(255,255,255,.5) 50%,transparent 70%);transform:translateX(-100%);animation:sheen 5.5s ease-in-out infinite}
+@keyframes sheen{0%,55%{transform:translateX(-100%)}85%,100%{transform:translateX(100%)}}
+.brand-mark svg{width:23px;height:23px;stroke:#2a1c08;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.brand-name{font-size:18px;font-weight:700;letter-spacing:.5px}
+.brand-name em{font-style:normal;background:var(--grad-amber);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+
+.form-head{margin-bottom:34px}
+.form-eyebrow{font-size:12px;letter-spacing:3px;color:var(--amber);font-weight:600;display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.form-eyebrow::before{content:"";width:24px;height:1px;background:var(--grad-amber)}
+.form-head h1{font-size:clamp(26px,3vw,32px);font-weight:750;letter-spacing:1px}
+.form-head p{margin-top:8px;color:var(--text-2);font-size:14px}
+
+.field{margin-bottom:20px}
+.field label{display:block;font-size:13px;color:var(--text-2);margin-bottom:8px;letter-spacing:.5px}
+.input-wrap{position:relative;display:flex;align-items:center}
+.input-wrap .lead{position:absolute;left:16px;color:var(--text-3);display:grid;place-items:center;pointer-events:none}
+.input-wrap .lead svg{width:17px;height:17px;stroke:currentColor;stroke-width:1.7;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.input-wrap input{
+  width:100%;padding:13px 44px;border-radius:14px;border:1px solid var(--line-strong);
+  background:rgba(255,255,255,.035);color:var(--text-1);font-size:14.5px;font-family:var(--font-display);
+  outline:none;transition:border-color var(--t-fast),box-shadow var(--t-fast),background var(--t-fast);letter-spacing:.5px}
+.input-wrap input::placeholder{color:var(--text-3)}
+.input-wrap input:focus{border-color:rgba(240,178,92,.65);background:rgba(255,255,255,.05);box-shadow:0 0 0 4px rgba(240,178,92,.12)}
+.input-wrap .tail{position:absolute;right:12px;display:grid;place-items:center}
+.icon-btn{width:32px;height:32px;border-radius:9px;border:none;background:transparent;color:var(--text-3);cursor:pointer;display:grid;place-items:center;transition:color var(--t-fast),background var(--t-fast)}
+.icon-btn:hover{color:var(--amber);background:rgba(240,178,92,.1)}
+.icon-btn svg{width:17px;height:17px;stroke:currentColor;stroke-width:1.7;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.field.err .input-wrap input{border-color:rgba(239,122,114,.7);box-shadow:0 0 0 4px rgba(239,122,114,.1)}
+.field-msg{display:none;margin-top:7px;font-size:12px;color:var(--err);align-items:center;gap:6px}
+.field-msg svg{width:13px;height:13px;stroke:currentColor;stroke-width:2;fill:none}
+.field.err .field-msg{display:flex}
+.shake{animation:shake .4s var(--ease-out-quart)}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-7px)}55%{transform:translateX(6px)}80%{transform:translateX(-3px)}}
+
+.row-opt{display:flex;align-items:center;justify-content:space-between;margin:4px 0 26px}
+.check{display:inline-flex;align-items:center;gap:9px;cursor:pointer;font-size:13px;color:var(--text-2);user-select:none}
+.check input{position:absolute;opacity:0;pointer-events:none}
+.check .box{width:18px;height:18px;border-radius:6px;border:1.5px solid var(--line-strong);display:grid;place-items:center;transition:all .25s var(--ease-out-quart)}
+.check .box svg{width:10px;height:10px;stroke:#2a1c08;stroke-width:3;fill:none;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:14;stroke-dashoffset:14;transition:stroke-dashoffset .3s var(--ease-out-quart) .05s}
+.check input:checked + .box{background:var(--grad-amber);border-color:transparent}
+.check input:checked + .box svg{stroke-dashoffset:0}
+.check input:focus-visible + .box{box-shadow:0 0 0 3px rgba(240,178,92,.25)}
+.link{color:var(--text-3);font-size:13px;text-decoration:none;transition:color var(--t-fast)}
+.link:hover{color:var(--amber)}
+
+.btn-login{width:100%;padding:14px;border-radius:14px;border:none;cursor:pointer;font-family:var(--font-display);font-size:15px;font-weight:650;letter-spacing:2px;
+  background:var(--grad-amber);color:#2a1c08;display:flex;align-items:center;justify-content:center;gap:10px;
+  transition:transform var(--t-fast) var(--ease-out-quart),box-shadow var(--t-fast),filter var(--t-fast);position:relative;overflow:hidden}
+.btn-login:hover{transform:translateY(-2px);box-shadow:0 16px 34px -10px rgba(240,151,90,.65);filter:saturate(1.08)}
+.btn-login:active{transform:translateY(1px) scale(.985)}
+.btn-login .spin{width:17px;height:17px;border-radius:50%;border:2px solid rgba(42,28,8,.35);border-top-color:#2a1c08;display:none;animation:rot .7s linear infinite}
+.btn-login .ok-ico{display:none;width:17px;height:17px;stroke:#2a1c08;stroke-width:3;fill:none;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:16;stroke-dashoffset:16}
+@keyframes rot{to{transform:rotate(360deg)}}
+.btn-login.loading{pointer-events:none;opacity:.85}
+.btn-login.loading .spin{display:block}
+.btn-login.loading .lbl{opacity:0}
+.btn-login.success{background:linear-gradient(135deg,#4aa88f,#58b892);color:#0c1f18}
+.btn-login.success .ok-ico{display:block;stroke-dashoffset:0;transition:stroke-dashoffset .4s var(--ease-out-quart) .1s}
+.btn-login.success .spin,.btn-login.success .lbl{display:none}
+
+.divider{display:flex;align-items:center;gap:14px;margin:26px 0;color:var(--text-3);font-size:12px;letter-spacing:1px}
+.divider::before,.divider::after{content:"";flex:1;height:1px;background:var(--line)}
+
+.social-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.social-btn{display:flex;align-items:center;justify-content:center;gap:9px;padding:12px;border-radius:14px;border:1px solid var(--line-strong);background:rgba(255,255,255,.03);color:var(--text-2);font-size:13.5px;cursor:pointer;font-family:var(--font-display);transition:all var(--t-fast) var(--ease-out-quart)}
+.social-btn:hover{transform:translateY(-2px);color:var(--text-1);background:rgba(255,255,255,.06);border-color:var(--line-strong)}
+.social-btn svg{width:17px;height:17px}
+.social-btn .wx{fill:#2eaa54;stroke:none}
+.social-btn .ph{stroke:var(--teal);fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+
+.form-foot{margin-top:30px;text-align:center;font-size:13px;color:var(--text-3)}
+.form-foot a{color:var(--amber);text-decoration:none;font-weight:600;margin-left:4px}
+.form-foot a:hover{text-decoration:underline}
+.legal{margin-top:18px;font-size:11px;color:var(--text-3);text-align:center;letter-spacing:.5px}
+
+/* 响应式 */
+@media (max-width:960px){
+  .login-wrap{grid-template-columns:1fr}
+  .scene-panel{display:none}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important}
+}
+</style>
+</head>
+<body>
+
+<!-- 环境层 -->
+<div class="aurora" aria-hidden="true"><i class="a1"></i><i class="a2"></i></div>
+<div class="grain" aria-hidden="true"></div>
+
+<div class="login-wrap">
+
+  <!-- ═══════════ 左：图书馆 · 一个人安静看书（动态） ═══════════ -->
+  <section class="scene-panel" aria-label="图书馆阅读场景">
+    <div class="scene">
+      <svg viewBox="0 0 640 700" role="img" aria-label="深夜图书馆中，一个人坐在书桌前安静看书">
+        <defs>
+          <linearGradient id="skyG" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#0e1626"/><stop offset="1" stop-color="#1b2c44"/>
+          </linearGradient>
+          <radialGradient id="lampL" cx=".5" cy=".32" r=".75">
+            <stop offset="0" stop-color="rgba(245,196,120,.55)"/><stop offset="1" stop-color="rgba(245,196,120,0)"/>
+          </radialGradient>
+          <radialGradient id="moonL" cx=".5" cy=".5" r=".5">
+            <stop offset="0" stop-color="rgba(247,227,176,.5)"/><stop offset="1" stop-color="rgba(247,227,176,0)"/>
+          </radialGradient>
+          <linearGradient id="floorG" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#17141c"/><stop offset="1" stop-color="#0e0c12"/>
+          </linearGradient>
+          <linearGradient id="deskG" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#463522"/><stop offset="1" stop-color="#332616"/>
+          </linearGradient>
+        </defs>
+
+        <!-- 墙面 -->
+        <rect width="640" height="700" fill="#141018"/>
+        <rect y="596" width="640" height="104" fill="url(#floorG)"/>
+        <rect y="590" width="640" height="6" fill="#201a26"/>
+
+        <!-- 拱形窗 + 夜空 -->
+        <path d="M82 60 h180 a90 90 0 0 1 180 0 v360 h-360 z" fill="url(#skyG)"/>
+        <!-- 远山剪影 -->
+        <path d="M82 372 Q150 330 200 360 T360 350 v70 h-278 z" fill="#0d1522" opacity=".85"/>
+        <path d="M82 388 Q130 358 190 378 T360 366 v56 h-278 z" fill="#0a0f1a"/>
+        <!-- 月亮 -->
+        <g class="moon-ray"><circle cx="214" cy="128" r="46" fill="url(#moonL)"/></g>
+        <circle cx="214" cy="128" r="22" fill="#f7e3b0"/>
+        <circle cx="205" cy="122" r="18" fill="#fbeecb" opacity=".8"/>
+        <!-- 星星 -->
+        <g fill="#e9f0ff">
+          <circle class="star" cx="130" cy="92" r="1.7" style="animation-delay:.2s"/>
+          <circle class="star" cx="176" cy="62" r="1.2" style="animation-delay:1.1s"/>
+          <circle class="star" cx="246" cy="86" r="1.5" style="animation-delay:.6s"/>
+          <circle class="star" cx="292" cy="118" r="1.1" style="animation-delay:1.7s"/>
+          <circle class="star" cx="112" cy="140" r="1.2" style="animation-delay:2.3s"/>
+          <circle class="star" cx="262" cy="170" r="1.4" style="animation-delay:.9s"/>
+          <circle class="star" cx="142" cy="196" r="1" style="animation-delay:2.8s"/>
+        </g>
+        <!-- 窗框 -->
+        <path d="M82 60 h180 a90 90 0 0 1 180 0 v360 h-360 z" fill="none" stroke="#2b2233" stroke-width="10"/>
+        <line x1="172" y1="150" x2="172" y2="420" stroke="#2b2233" stroke-width="8"/>
+        <line x1="82" y1="248" x2="262" y2="248" stroke="#2b2233" stroke-width="8"/>
+        <!-- 窗台 -->
+        <rect x="66" y="414" width="276" height="14" rx="3" fill="#2b2233"/>
+
+        <!-- 书架 -->
+        <g>
+          <rect x="356" y="80" width="248" height="520" rx="6" fill="#1f1822"/>
+          <!-- 三层架板 -->
+          <rect x="356" y="80" width="248" height="12" fill="#2a2230"/>
+          <rect x="356" y="214" width="248" height="8" fill="#2a2230"/>
+          <rect x="356" y="348" width="248" height="8" fill="#2a2230"/>
+          <rect x="356" y="482" width="248" height="8" fill="#2a2230"/>
+          <!-- 第 1 层书脊 -->
+          <g stroke-width="0">
+            <rect x="368" y="98" width="12" height="108" rx="2" fill="#9c4f3c"/><rect x="384" y="98" width="9" height="108" rx="2" fill="#c98d4b"/>
+            <rect x="397" y="98" width="13" height="108" rx="2" fill="#5c7f8f"/><rect x="414" y="98" width="10" height="108" rx="2" fill="#8a5f9e"/>
+            <rect x="428" y="98" width="14" height="108" rx="2" fill="#4f8f78"/><rect x="446" y="98" width="9" height="108" rx="2" fill="#a8763f"/>
+            <rect x="459" y="98" width="12" height="108" rx="2" fill="#6b6f9e"/><rect x="475" y="98" width="10" height="108" rx="2" fill="#9c4f3c"/>
+            <rect x="489" y="98" width="13" height="108" rx="2" fill="#5c7f8f"/><rect x="506" y="98" width="9" height="108" rx="2" fill="#c98d4b"/>
+            <rect x="519" y="98" width="12" height="108" rx="2" fill="#4f8f78"/><rect x="535" y="98" width="10" height="108" rx="2" fill="#8a5f9e"/>
+            <rect x="549" y="98" width="12" height="108" rx="2" fill="#a8763f"/><rect x="565" y="98" width="9" height="108" rx="2" fill="#6b6f9e"/>
+            <rect x="578" y="98" width="12" height="108" rx="2" fill="#9c4f3c"/>
+          </g>
+          <!-- 第 2 层 -->
+          <g>
+            <rect x="368" y="230" width="13" height="110" rx="2" fill="#c98d4b"/><rect x="385" y="230" width="10" height="110" rx="2" fill="#6b6f9e"/>
+            <rect x="399" y="230" width="12" height="110" rx="2" fill="#8a5f9e"/><rect x="415" y="230" width="9" height="110" rx="2" fill="#5c7f8f"/>
+            <rect x="428" y="230" width="14" height="110" rx="2" fill="#9c4f3c"/><rect x="446" y="230" width="10" height="110" rx="2" fill="#a8763f"/>
+            <rect x="460" y="230" width="12" height="110" rx="2" fill="#4f8f78"/><rect x="476" y="230" width="9" height="110" rx="2" fill="#c98d4b"/>
+            <rect x="489" y="230" width="13" height="110" rx="2" fill="#6b6f9e"/><rect x="506" y="230" width="10" height="110" rx="2" fill="#9c4f3c"/>
+            <rect x="520" y="230" width="12" height="110" rx="2" fill="#5c7f8f"/><rect x="536" y="230" width="9" height="110" rx="2" fill="#8a5f9e"/>
+            <rect x="549" y="230" width="13" height="110" rx="2" fill="#a8763f"/><rect x="566" y="230" width="10" height="110" rx="2" fill="#4f8f78"/>
+            <rect x="580" y="230" width="12" height="110" rx="2" fill="#c98d4b"/>
+          </g>
+          <!-- 第 3 层（含斜放书与绿植） -->
+          <g>
+            <rect x="368" y="362" width="12" height="112" rx="2" fill="#4f8f78"/><rect x="384" y="362" width="10" height="112" rx="2" fill="#9c4f3c"/>
+            <rect x="398" y="362" width="13" height="112" rx="2" fill="#6b6f9e"/><rect x="415" y="362" width="9" height="112" rx="2" fill="#c98d4b"/>
+            <rect x="428" y="362" width="14" height="112" rx="2" fill="#5c7f8f"/><rect x="446" y="362" width="10" height="112" rx="2" fill="#a8763f"/>
+            <!-- 斜放的书 -->
+            <g transform="rotate(18 470 470)"><rect x="458" y="362" width="12" height="110" rx="2" fill="#8a5f9e"/></g>
+            <g transform="rotate(24 490 470)"><rect x="484" y="362" width="10" height="110" rx="2" fill="#9c4f3c"/></g>
+            <rect x="506" y="362" width="12" height="112" rx="2" fill="#4f8f78"/><rect x="522" y="362" width="9" height="112" rx="2" fill="#c98d4b"/>
+            <rect x="535" y="362" width="13" height="112" rx="2" fill="#6b6f9e"/><rect x="552" y="362" width="10" height="112" rx="2" fill="#5c7f8f"/>
+            <!-- 盆栽 -->
+            <path d="M580 470 q7 -8 14 0 l-2 6 h-10 z" fill="#3d5a43"/>
+            <path d="M587 474 h-5 l-2 -16 q4 -5 9 0 z" fill="#4f8f78"/>
+          </g>
+          <!-- 书架装饰顶线 -->
+          <rect x="356" y="80" width="248" height="3" fill="rgba(240,178,92,.25)"/>
+        </g>
+
+        <!-- ═══ 人物：一个人安静看书 ═══ -->
+        <g class="person-breathe">
+          <!-- 身体剪影 -->
+          <path d="M128 500 Q128 418 162 386 L188 386 Q222 418 222 500 L222 526 L128 526 Z" fill="#0b0910"/>
+          <!-- 肩颈 -->
+          <path d="M150 400 Q172 388 198 400 L196 424 Q172 412 152 424 Z" fill="#0b0910"/>
+          <!-- 头 -->
+          <ellipse cx="174" cy="356" rx="25" ry="29" fill="#0b0910"/>
+          <!-- 发梢 + 低头看书的脸侧高光 -->
+          <path d="M149 356 Q149 326 174 326 Q199 326 199 356" fill="#0b0910"/>
+          <path d="M156 368 Q164 352 178 350" stroke="#f0b25c" stroke-width="1.6" fill="none" opacity=".5" stroke-linecap="round"/>
+          <!-- 台灯暖光勾勒右侧轮廓（rim light） -->
+          <path d="M198 356 Q212 386 216 440 Q220 470 222 500" stroke="rgba(240,178,92,.5)" stroke-width="2.2" fill="none" stroke-linecap="round" opacity=".45"/>
+          <!-- 手臂伸向书本 -->
+          <path d="M160 452 Q168 492 186 508" stroke="#0b0910" stroke-width="17" stroke-linecap="round" fill="none"/>
+          <path d="M188 452 Q190 492 200 508" stroke="#0b0910" stroke-width="15" stroke-linecap="round" fill="none"/>
+          <circle cx="186" cy="509" r="6.5" fill="#0b0910"/>
+          <circle cx="201" cy="509" r="6" fill="#0b0910"/>
+        </g>
+
+        <!-- 书桌 -->
+        <path d="M28 512 L612 512 L604 560 L36 560 Z" fill="url(#deskG)"/>
+        <path d="M28 512 L612 512" stroke="#4f3c26" stroke-width="3" stroke-linecap="round"/>
+        <!-- 桌腿 -->
+        <rect x="46" y="560" width="14" height="130" fill="#241a10"/>
+        <rect x="580" y="560" width="14" height="130" fill="#241a10"/>
+        <rect x="300" y="560" width="12" height="130" fill="#241a10" opacity=".6"/>
+        <!-- 桌面杂物：笔记本 + 咖啡 -->
+        <rect x="430" y="534" width="56" height="3" rx="1.5" fill="#8d7350" opacity=".8"/>
+        <rect x="430" y="522" width="56" height="12" rx="2" fill="#3c2f1e" opacity=".9"/>
+        <line x1="436" y1="526" x2="478" y2="526" stroke="#6b5a3e" stroke-width="1.4"/>
+        <line x1="436" y1="529.5" x2="470" y2="529.5" stroke="#6b5a3e" stroke-width="1.4"/>
+        <rect x="498" y="516" width="26" height="20" rx="4" fill="#1e1626" opacity=".9"/>
+        <path d="M505 516 v10 a6 6 0 0 0 6 6 h13 v-4" stroke="#8d7350" stroke-width="1.6" fill="none" opacity=".7"/>
+
+        <!-- ═══ 翻开书本（翻页动画） ═══ -->
+        <g>
+          <!-- 书底封面 -->
+          <path d="M148 502 L256 518 L256 546 L144 534 Z" fill="#4a3524"/>
+          <path d="M256 518 L364 502 L376 534 L256 546 Z" fill="#3f2d1f"/>
+          <!-- 中缝 -->
+          <line x1="256" y1="518" x2="256" y2="546" stroke="#2c1e12" stroke-width="3"/>
+          <!-- 左页（静） -->
+          <path d="M152 504 L254 519 L254 544 L148 532 Z" fill="#e8dfc8"/>
+          <g stroke="#b7ab8c" stroke-width="1.6" stroke-linecap="round" opacity=".85">
+            <line x1="166" y1="516" x2="240" y2="528"/><line x1="166" y1="523" x2="240" y2="535"/><line x1="166" y1="530" x2="226" y2="540"/>
+          </g>
+          <!-- 右页（翻动） -->
+          <g class="book-page-r">
+            <g>
+              <path d="M258 519 L362 504 L374 534 L258 544 Z" fill="#f1ead6"/>
+              <g stroke="#c4b896" stroke-width="1.6" stroke-linecap="round" opacity=".9">
+                <line x1="272" y1="516" x2="348" y2="527"/><line x1="272" y1="523" x2="348" y2="534"/><line x1="272" y1="530" x2="330" y2="539"/>
+              </g>
+            </g>
+          </g>
+        </g>
+
+        <!-- ═══ 台灯 ═══ -->
+        <g class="lamp-sway">
+          <ellipse cx="548" cy="556" rx="26" ry="7" fill="#241a10"/>
+          <rect x="545" y="432" width="6" height="124" rx="3" fill="#2c2318"/>
+          <!-- 灯罩 -->
+          <path d="M510 452 Q548 426 586 452 L578 470 Q548 452 518 470 Z" fill="#2f4b40"/>
+          <path d="M510 452 Q548 426 586 452" stroke="#4a6f5f" stroke-width="2" fill="none"/>
+          <!-- 灯光 -->
+          <path d="M548 468 L404 566 L692 566 Z" fill="url(#lampL)"/>
+          <circle class="lamp-glow" cx="548" cy="500" r="130" fill="url(#lampL)"/>
+        </g>
+
+        <!-- 漂浮尘埃（图书馆空气中的微尘） -->
+        <g fill="#f5e6c8" opacity="0">
+          <circle class="dust" cx="120" cy="430" r="1.5" style="animation-duration:9s;animation-delay:0s"/>
+          <circle class="dust" cx="196" cy="460" r="1.1" style="animation-duration:11s;animation-delay:2.5s"/>
+          <circle class="dust" cx="300" cy="420" r="1.3" style="animation-duration:8s;animation-delay:1.2s"/>
+          <circle class="dust" cx="380" cy="380" r="1.2" style="animation-duration:10s;animation-delay:4s"/>
+          <circle class="dust" cx="470" cy="440" r="1.6" style="animation-duration:12s;animation-delay:.8s"/>
+          <circle class="dust" cx="540" cy="300" r="1.1" style="animation-duration:9.5s;animation-delay:3.4s"/>
+          <circle class="dust" cx="90" cy="330" r="1" style="animation-duration:10.5s;animation-delay:5s"/>
+          <circle class="dust" cx="440" cy="250" r="1.2" style="animation-duration:8.5s;animation-delay:1.8s"/>
+        </g>
+      </svg>
+    </div>
+    <p class="scene-caption">深夜的图书馆，只有翻书声与灯光。<br>这里很安静，也藏着你要的答案——<b>在安静里，遇见更好的自己。</b></p>
+  </section>
+
+  <!-- ═══════════ 右：登录表单 ═══════════ -->
+  <section class="form-panel" aria-label="登录表单">
+    <div class="form-inner">
+
+      <a class="brand" href="index.html">
+        <span class="brand-mark">
+          <svg viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 15l.9 2.6L22.5 18.5l-2.6.9L19 22l-.9-2.6-2.6-.9 2.6-.9z"/></svg>
+        </span>
+        <span class="brand-name">晨光<em>自律台</em></span>
+      </a>
+
+      <div class="form-head">
+        <span class="form-eyebrow">WELCOME BACK</span>
+        <h1>欢迎回来</h1>
+        <p>登录后继续今天的学习计划 · 记得打卡哦</p>
+      </div>
+
+      <form id="loginForm" novalidate>
+        <div class="field" id="fPhone">
+          <label for="phone">手机号</label>
+          <div class="input-wrap">
+            <span class="lead"><svg viewBox="0 0 24 24"><rect x="7" y="2.5" width="10" height="19" rx="3"/><line x1="10.5" y1="18.5" x2="13.5" y2="18.5"/></svg></span>
+            <input id="phone" type="tel" inputmode="numeric" maxlength="11" placeholder="请输入 11 位手机号" autocomplete="tel">
+          </div>
+          <span class="field-msg"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="12.5"/><circle cx="12" cy="16" r=".6" fill="currentColor"/></svg> 请输入正确的手机号</span>
+        </div>
+
+        <div class="field" id="fPwd">
+          <label for="pwd">密码</label>
+          <div class="input-wrap">
+            <span class="lead"><svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="11" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
+            <input id="pwd" type="password" placeholder="请输入密码" autocomplete="current-password">
+            <span class="tail">
+              <button class="icon-btn" type="button" id="pwdToggle" aria-label="显示密码">
+                <svg id="eyeOpen" viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg id="eyeClosed" viewBox="0 0 24 24" style="display:none"><path d="M3 3l18 18"/><path d="M10.6 5.2A10.9 10.9 0 0 1 12 5c6.4 0 10 7 10 7a17.6 17.6 0 0 1-3.4 4M6.6 6.6A16.4 16.4 0 0 0 2 12s3.6 7 10 7a9.6 9.6 0 0 0 4.4-1"/></svg>
+              </button>
+            </span>
+          </div>
+          <span class="field-msg"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="12.5"/><circle cx="12" cy="16" r=".6" fill="currentColor"/></svg> 密码不能为空</span>
+        </div>
+
+        <div class="row-opt">
+          <label class="check">
+            <input type="checkbox" checked>
+            <span class="box"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span>
+            记住我
+          </label>
+          <a class="link" href="#">忘记密码？</a>
+        </div>
+
+        <button class="btn-login" type="submit" id="loginBtn">
+          <span class="spin"></span>
+          <svg class="ok-ico" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
+          <span class="lbl">登 录</span>
+        </button>
+      </form>
+
+      <div class="divider">或使用以下方式</div>
+
+      <div class="social-row">
+        <button class="social-btn" type="button">
+          <svg viewBox="0 0 24 24"><path class="wx" d="M8.7 4C4.9 4 2 6.5 2 9.6c0 1.7 1 3.2 2.5 4.2l-.6 1.9 2.2-1.1c.5.1 1 .2 1.6.2.2 0 .4 0 .6-.1-.1-.4-.1-.8-.1-1.2 0-2.9 2.5-5.2 5.7-5.2h.5C13.6 5.9 11.3 4 8.7 4zM6.4 7.3a.8.8 0 1 1 0 1.6.8.8 0 0 1 0-1.6zm4.5 0a.8.8 0 1 1 0 1.6.8.8 0 0 1 0-1.6z"/><path class="wx" d="M22 13.9c0-2.7-2.4-4.9-5.4-4.9s-5.4 2.2-5.4 4.9 2.4 4.9 5.4 4.9c.5 0 1.1-.1 1.5-.2l1.9 1-.5-1.6c1.4-.9 2.5-2.3 2.5-4.1zm-7.1-.7a.7.7 0 1 1 0-1.4.7.7 0 0 1 0 1.4zm3.4 0a.7.7 0 1 1 0-1.4.7.7 0 0 1 0 1.4z"/></svg>
+          微信登录
+        </button>
+        <button class="social-btn" type="button">
+          <svg class="ph" viewBox="0 0 24 24"><rect x="7" y="2.5" width="10" height="19" rx="3"/><line x1="10.5" y1="18.5" x2="13.5" y2="18.5"/></svg>
+          手机号登录
+        </button>
+      </div>
+
+      <p class="form-foot">还没有账号？<a href="#">立即注册</a></p>
+      <p class="legal">登录即代表同意《用户协议》与《隐私政策》</p>
+    </div>
+  </section>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var form = document.getElementById("loginForm");
+  var btn = document.getElementById("loginBtn");
+  var fPhone = document.getElementById("fPhone");
+  var fPwd = document.getElementById("fPwd");
+  var phone = document.getElementById("phone");
+  var pwd = document.getElementById("pwd");
+
+  /* 密码可见切换 */
+  var toggle = document.getElementById("pwdToggle");
+  var eyeOpen = document.getElementById("eyeOpen"), eyeClosed = document.getElementById("eyeClosed");
+  toggle.addEventListener("click", function(){
+    var show = pwd.type === "password";
+    pwd.type = show ? "text" : "password";
+    eyeOpen.style.display = show ? "none" : "block";
+    eyeClosed.style.display = show ? "block" : "none";
+    toggle.setAttribute("aria-label", show ? "隐藏密码" : "显示密码");
+  });
+
+  /* 实时清除错误态 */
+  phone.addEventListener("input", function(){ fPhone.classList.remove("err","shake"); });
+  pwd.addEventListener("input", function(){ fPwd.classList.remove("err","shake"); });
+
+  /* 提交：校验 → 加载 → 成功 微交互 */
+  form.addEventListener("submit", function(e){
+    e.preventDefault();
+    var ok = true;
+    if (!/^1[3-9]\d{9}$/.test(phone.value.trim())){ fPhone.classList.add("err","shake"); ok = false; }
+    else fPhone.classList.remove("err");
+    if (!pwd.value){ fPwd.classList.add("err","shake"); ok = false; }
+    else fPwd.classList.remove("err");
+    if (!ok){ setTimeout(function(){ fPhone.classList.remove("shake"); fPwd.classList.remove("shake"); }, 450); return; }
+
+    btn.classList.add("loading");
+    btn.disabled = true;
+    setTimeout(function(){
+      btn.classList.remove("loading");
+      btn.classList.add("success");
+      setTimeout(function(){
+        btn.classList.remove("success");
+        btn.disabled = false;
+        btn.querySelector(".lbl").textContent = "欢迎回来 ✦";
+      }, 2400);
+    }, 1500);
+  });
+})();
+</script>
+</body>
+</html>

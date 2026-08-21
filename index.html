@@ -1,14 +1,704 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="zh-CN">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8E%93%3C/text%3E%3C/svg%3E" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>大学生AI自律工作台</title>
-    <script type="module" crossorigin src="./assets/index-BGcJcF80.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-B6rVmJQG.css">
-  </head>
-  <body>
-    <div id="root"></div>
-  </body>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>晨光自律台 · 大学生 AI 自律工作台</title>
+<meta name="description" content="每天进步一点点，自律让我自由。">
+<style>
+/* ============================================================
+   1. DESIGN TOKENS — 晨光自律台设计系统
+   暖石墨底色 × 晨光琥珀/珊瑚渐变 × 青瓷冷色对撞
+   ============================================================ */
+:root{
+  /* Color Tokens */
+  --bg-0:#0d1016;                 /* 页面底色（暖石墨，非纯黑） */
+  --bg-1:#11151d;                 /* 卡片底座 */
+  --bg-2:#171c26;                 /* 卡片渐变端 */
+  --line:rgba(255,255,255,.07);   /* 细边框 */
+  --line-strong:rgba(255,255,255,.13);
+
+  --amber:#f0b25c;                /* 晨光主色 */
+  --coral:#f07a5a;                /* 晨光辅色 */
+  --rose:#f26d85;
+  --teal:#5cc8b2;                 /* 冷色对撞 · 数据 */
+  --sky:#7ba7d9;
+  --grass:#7ec98f;
+
+  --grad-amber:linear-gradient(135deg,#f5c06a 0%,#f0975a 48%,#f07a5a 100%);
+  --grad-card:linear-gradient(160deg,#171c26 0%,#12161e 100%);
+
+  --text-1:#f4f1ea;               /* 暖白主文字 */
+  --text-2:#a8b0bd;               /* 次级文字 */
+  --text-3:#6d7684;               /* 弱化文字 */
+
+  --ok:#58b892;
+  --warn:#e6b45c;
+
+  /* Typography */
+  --font-display:"HarmonyOS Sans SC","MiSans","PingFang SC","Microsoft YaHei UI","Microsoft YaHei",system-ui,sans-serif;
+  --font-num:"Bahnschrift","DIN Alternate","Segoe UI",var(--font-display);
+
+  /* Spacing (4pt base) */
+  --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:20px;--s6:24px;--s8:32px;--s10:40px;--s12:48px;--s16:64px;
+
+  /* Radius */
+  --r-sm:10px;--r-md:16px;--r-lg:22px;--r-full:999px;
+
+  /* Motion */
+  --ease-out-quart:cubic-bezier(.25,1,.5,1);
+  --ease-out-expo:cubic-bezier(.16,1,.3,1);
+  --t-fast:.18s;--t-med:.45s;--t-slow:.9s;
+
+  /* Shadow */
+  --shadow-card:0 1px 0 rgba(255,255,255,.04) inset,0 10px 30px -12px rgba(0,0,0,.55);
+  --shadow-float:0 22px 50px -18px rgba(0,0,0,.65),0 1px 0 rgba(255,255,255,.06) inset;
+}
+
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  font-family:var(--font-display);
+  background:var(--bg-0);
+  color:var(--text-1);
+  min-height:100vh;
+  overflow-x:hidden;
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+  position:relative;
+}
+
+/* ============================================================
+   2. 环境层 — 光斑 / 噪点 / 网格线
+   ============================================================ */
+.aurora{position:fixed;inset:0;z-index:-3;overflow:hidden;pointer-events:none}
+.aurora i{position:absolute;border-radius:50%;filter:blur(90px);opacity:.55;will-change:transform}
+.aurora .a1{width:44vw;height:44vw;left:-12vw;top:-16vw;background:radial-gradient(circle,rgba(240,178,92,.34),transparent 65%);animation:drift1 34s ease-in-out infinite alternate}
+.aurora .a2{width:38vw;height:38vw;right:-10vw;top:6vh;background:radial-gradient(circle,rgba(124,87,178,.26),transparent 65%);animation:drift2 42s ease-in-out infinite alternate}
+.aurora .a3{width:30vw;height:30vw;left:26vw;bottom:-18vw;background:radial-gradient(circle,rgba(92,200,178,.16),transparent 65%);animation:drift3 38s ease-in-out infinite alternate}
+@keyframes drift1{to{transform:translate(9vw,7vh) scale(1.14)}}
+@keyframes drift2{to{transform:translate(-8vw,10vh) scale(1.2)}}
+@keyframes drift3{to{transform:translate(6vw,-8vh) scale(.9)}}
+
+.grain{position:fixed;inset:0;z-index:40;pointer-events:none;opacity:.05;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+}
+
+.gridline{position:fixed;inset:0;z-index:-2;pointer-events:none;
+  background-image:linear-gradient(rgba(255,255,255,.022) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.022) 1px,transparent 1px);
+  background-size:56px 56px;
+  mask-image:radial-gradient(ellipse 90% 70% at 50% 0%,#000 30%,transparent 78%);
+}
+
+/* ============================================================
+   3. 布局容器
+   ============================================================ */
+.wrap{max-width:1240px;margin:0 auto;padding:var(--s6) clamp(16px,4vw,40px) var(--s16)}
+
+/* 顶栏 */
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:var(--s4);padding:var(--s4) 0 var(--s8)}
+.brand{display:flex;align-items:center;gap:var(--s3);text-decoration:none;color:var(--text-1)}
+.brand-mark{width:40px;height:40px;border-radius:13px;background:var(--grad-amber);display:grid;place-items:center;box-shadow:0 8px 22px -6px rgba(240,151,90,.55);position:relative;overflow:hidden}
+.brand-mark::after{content:"";position:absolute;inset:0;background:linear-gradient(120deg,transparent 30%,rgba(255,255,255,.5) 50%,transparent 70%);transform:translateX(-100%);animation:sheen 5.5s ease-in-out infinite}
+@keyframes sheen{0%,55%{transform:translateX(-100%)}85%,100%{transform:translateX(100%)}}
+.brand-mark svg{width:22px;height:22px;stroke:#2a1c08;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.brand-name{font-size:17px;font-weight:700;letter-spacing:.5px}
+.brand-name em{font-style:normal;background:var(--grad-amber);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.brand-sub{font-size:11.5px;color:var(--text-3);letter-spacing:2px;margin-top:2px}
+
+.topbar-right{display:flex;align-items:center;gap:var(--s3)}
+.chip-date{display:flex;align-items:center;gap:var(--s2);padding:9px 16px;border:1px solid var(--line);border-radius:var(--r-full);background:rgba(255,255,255,.03);font-size:13px;color:var(--text-2);white-space:nowrap}
+.chip-date b{color:var(--text-1);font-weight:600}
+.avatar{width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,#ffd9a8,#f0a05a);display:grid;place-items:center;font-size:21px;cursor:pointer;position:relative;transition:transform var(--t-fast) var(--ease-out-quart)}
+.avatar:hover{transform:scale(1.08) rotate(-4deg)}
+.avatar::after{content:"";position:absolute;inset:-3px;border-radius:50%;border:1.5px solid rgba(240,178,92,.45);animation:ring-pulse 2.6s ease-out infinite}
+@keyframes ring-pulse{0%{transform:scale(.9);opacity:.9}70%,100%{transform:scale(1.22);opacity:0}}
+
+/* ============================================================
+   4. 卡片基元 — 玻璃拟态 + 鼠标视差光晕
+   ============================================================ */
+.card{position:relative;border-radius:var(--r-lg);background:var(--grad-card);border:1px solid var(--line);box-shadow:var(--shadow-card);overflow:hidden;transition:transform var(--t-med) var(--ease-out-quart),box-shadow var(--t-med) var(--ease-out-quart),border-color var(--t-med)}
+.card::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;opacity:0;transition:opacity var(--t-slow) var(--ease-out-quart);
+  background:radial-gradient(560px circle at var(--mx,50%) var(--my,0%),rgba(240,178,92,.09),transparent 42%)}
+.card:hover{transform:translateY(-4px);box-shadow:var(--shadow-float);border-color:var(--line-strong)}
+.card:hover::before{opacity:1}
+.card-pad{padding:var(--s6)}
+
+.card-head{display:flex;align-items:center;justify-content:space-between;gap:var(--s3);margin-bottom:var(--s5)}
+.card-title{display:flex;align-items:center;gap:var(--s3);font-size:15px;font-weight:650;letter-spacing:.4px}
+.card-title .ico{width:34px;height:34px;border-radius:11px;display:grid;place-items:center;border:1px solid var(--line);background:rgba(255,255,255,.04)}
+.card-title .ico svg{width:17px;height:17px;stroke:currentColor;stroke-width:1.7;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.card-link{font-size:12.5px;color:var(--text-3);text-decoration:none;display:inline-flex;align-items:center;gap:4px;transition:color var(--t-fast)}
+.card-link:hover{color:var(--amber)}
+.card-link svg{width:13px;height:13px;stroke:currentColor;stroke-width:1.8;fill:none}
+
+/* ============================================================
+   5. 主网格
+   ============================================================ */
+.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:var(--s5)}
+.col-5{grid-column:span 5}
+.col-7{grid-column:span 7}
+.col-4{grid-column:span 4}
+.col-8{grid-column:span 8}
+.col-12{grid-column:span 12}
+
+/* ============================================================
+   6. Hero 区 — 今日焦点
+   ============================================================ */
+.hero{display:flex;align-items:center;gap:clamp(20px,4vw,44px);min-height:230px}
+.hero-greet{flex:1}
+.hero-eyebrow{display:inline-flex;align-items:center;gap:7px;font-size:12px;letter-spacing:2.5px;color:var(--amber);margin-bottom:var(--s3);font-weight:600}
+.hero-eyebrow::before{content:"";width:26px;height:1px;background:var(--grad-amber)}
+.hero-greet h1{font-size:clamp(26px,3.4vw,38px);font-weight:750;letter-spacing:1px;line-height:1.25}
+.hero-greet h1 span{background:var(--grad-amber);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.hero-quote{margin-top:var(--s3);color:var(--text-2);font-size:14px;max-width:34ch}
+.hero-actions{display:flex;gap:var(--s3);margin-top:var(--s5);flex-wrap:wrap}
+
+.btn{display:inline-flex;align-items:center;gap:8px;padding:11px 22px;border-radius:var(--r-full);font-size:14px;font-weight:600;letter-spacing:.3px;cursor:pointer;border:none;text-decoration:none;font-family:var(--font-display);transition:transform var(--t-fast) var(--ease-out-quart),box-shadow var(--t-fast),filter var(--t-fast)}
+.btn:active{transform:translateY(1px) scale(.98)}
+.btn svg{width:15px;height:15px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.btn-primary{background:var(--grad-amber);color:#2a1c08;box-shadow:0 10px 26px -8px rgba(240,151,90,.6)}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 16px 34px -10px rgba(240,151,90,.7);filter:saturate(1.08)}
+.btn-ghost{background:rgba(255,255,255,.04);color:var(--text-2);border:1px solid var(--line-strong)}
+.btn-ghost:hover{color:var(--text-1);background:rgba(255,255,255,.07);transform:translateY(-2px)}
+
+/* 今日专注大环 */
+.hero-ring{flex-shrink:0;position:relative;width:170px;height:170px;display:grid;place-items:center}
+.hero-ring svg{width:100%;height:100%;transform:rotate(-90deg)}
+.hero-ring .track{fill:none;stroke:rgba(255,255,255,.07);stroke-width:9}
+.hero-ring .bar{fill:none;stroke:url(#ringGrad);stroke-width:9;stroke-linecap:round;stroke-dasharray:477.5;stroke-dashoffset:477.5;transition:stroke-dashoffset 1.6s var(--ease-out-expo)}
+.hero-ring .num{position:absolute;text-align:center}
+.hero-ring .num b{display:block;font-family:var(--font-num);font-size:34px;font-weight:700;font-variant-numeric:tabular-nums}
+.hero-ring .num small{font-size:11px;color:var(--text-3);letter-spacing:1.5px}
+
+/* ============================================================
+   7. 资料卡
+   ============================================================ */
+.profile{text-align:center;padding:var(--s8) var(--s6) var(--s6)}
+.profile-avatar{width:86px;height:86px;margin:0 auto var(--s4);border-radius:28px;background:linear-gradient(135deg,#ffd9a8,#f0a05a 60%,#e8734f);display:grid;place-items:center;font-size:44px;box-shadow:0 18px 40px -12px rgba(240,160,90,.55);position:relative;transition:transform var(--t-med) var(--ease-out-expo)}
+.card:hover .profile-avatar{transform:scale(1.06) rotate(-3deg)}
+.profile-avatar::after{content:"✦";position:absolute;top:-9px;right:-9px;width:26px;height:26px;border-radius:50%;background:var(--bg-1);border:1px solid var(--line-strong);display:grid;place-items:center;font-size:12px;color:var(--amber)}
+.profile h3{font-size:21px;font-weight:750;letter-spacing:1px}
+.profile .tag{display:inline-flex;align-items:center;gap:6px;margin-top:var(--s2);padding:5px 13px;border-radius:var(--r-full);background:rgba(92,200,178,.1);border:1px solid rgba(92,200,178,.25);color:var(--teal);font-size:12px;letter-spacing:.5px}
+.profile .tag svg{width:12px;height:12px;stroke:currentColor;stroke-width:2;fill:none}
+.profile .motto{margin-top:var(--s4);color:var(--text-2);font-size:13px;line-height:1.8}
+.profile .edit{margin-top:var(--s5);width:100%}
+.profile .streak{display:flex;justify-content:space-around;margin-top:var(--s6);padding-top:var(--s5);border-top:1px dashed var(--line-strong)}
+.streak div{text-align:center}
+.streak b{font-family:var(--font-num);font-size:19px;font-weight:700;font-variant-numeric:tabular-nums}
+.streak small{display:block;font-size:11px;color:var(--text-3);margin-top:3px;letter-spacing:1px}
+
+/* ============================================================
+   8. 今日计划
+   ============================================================ */
+.plan-progress{display:flex;align-items:center;gap:var(--s4);margin-bottom:var(--s5)}
+.plan-progress .meta{font-size:13px;color:var(--text-2);white-space:nowrap}
+.plan-progress .meta b{font-family:var(--font-num);color:var(--amber);font-size:15px}
+.plan-bar{flex:1;height:6px;border-radius:var(--r-full);background:rgba(255,255,255,.06);overflow:hidden}
+.plan-bar i{display:block;height:100%;width:0;border-radius:inherit;background:var(--grad-amber);transition:width 1.4s var(--ease-out-expo)}
+
+.plan-list{list-style:none;display:flex;flex-direction:column;gap:6px}
+.plan-item{display:flex;align-items:center;gap:var(--s3);padding:11px 13px;border-radius:var(--r-md);cursor:pointer;border:1px solid transparent;transition:background var(--t-fast),border-color var(--t-fast),transform var(--t-fast) var(--ease-out-quart)}
+.plan-item:hover{background:rgba(255,255,255,.04);border-color:var(--line);transform:translateX(3px)}
+.plan-check{flex-shrink:0;width:22px;height:22px;border-radius:8px;border:1.5px solid var(--line-strong);display:grid;place-items:center;transition:all .3s var(--ease-out-quart);background:transparent}
+.plan-check svg{width:12px;height:12px;stroke:#fff;stroke-width:3;fill:none;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:16;stroke-dashoffset:16;transition:stroke-dashoffset .35s var(--ease-out-quart) .08s}
+.plan-item.done .plan-check{background:var(--ok);border-color:var(--ok);box-shadow:0 4px 14px -4px rgba(88,184,146,.7)}
+.plan-item.done .plan-check svg{stroke-dashoffset:0}
+.plan-item.done .plan-txt{color:var(--text-3);text-decoration:line-through;text-decoration-color:rgba(168,176,189,.5)}
+.plan-txt{flex:1;font-size:14px;transition:color var(--t-fast)}
+.plan-cat{font-size:11px;color:var(--text-3);padding:3px 10px;border-radius:var(--r-full);background:rgba(255,255,255,.05);white-space:nowrap}
+.plan-item[data-cat="学习"] .plan-cat{color:#a7c6f0;background:rgba(123,167,217,.12)}
+.plan-item[data-cat="英语"] .plan-cat{color:#f0b8c0;background:rgba(242,109,133,.12)}
+.plan-item[data-cat="运动"] .plan-cat{color:#a8e3c9;background:rgba(92,200,178,.12)}
+.plan-item[data-cat="阅读"] .plan-cat{color:#f2d9a6;background:rgba(230,180,92,.12)}
+.plan-item[data-cat="复盘"] .plan-cat{color:#cbb8f0;background:rgba(155,120,220,.14)}
+
+/* ============================================================
+   9. 日历
+   ============================================================ */
+.cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--s4)}
+.cal-head h4{font-size:16px;font-weight:650;display:flex;align-items:center;gap:8px}
+.cal-head h4 span{color:var(--text-3);font-weight:500;font-size:14px}
+.cal-nav{display:flex;gap:6px}
+.cal-nav button{width:32px;height:32px;border-radius:10px;border:1px solid var(--line);background:rgba(255,255,255,.03);color:var(--text-2);cursor:pointer;display:grid;place-items:center;transition:all var(--t-fast)}
+.cal-nav button:hover{color:var(--amber);border-color:rgba(240,178,92,.4);transform:translateY(-1px)}
+.cal-nav svg{width:14px;height:14px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.cal-week{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:8px}
+.cal-week span{text-align:center;font-size:11.5px;color:var(--text-3);letter-spacing:1px;font-weight:600}
+.cal-days{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.cal-day{position:relative;aspect-ratio:1;display:grid;place-items:center;font-size:13px;font-variant-numeric:tabular-nums;color:var(--text-2);border-radius:11px;transition:all var(--t-fast) var(--ease-out-quart);cursor:default}
+.cal-day:hover{background:rgba(255,255,255,.05)}
+.cal-day.empty{visibility:hidden}
+.cal-day .dot{position:absolute;bottom:6px;width:4px;height:4px;border-radius:50%;background:var(--amber);box-shadow:0 0 6px rgba(240,178,92,.8)}
+.cal-day.today{background:var(--grad-amber);color:#2a1c08;font-weight:700;box-shadow:0 8px 20px -6px rgba(240,151,90,.55)}
+.cal-day.today .dot{background:#2a1c08;box-shadow:none;bottom:5px}
+.cal-day.high{background:rgba(240,178,92,.13);border:1px solid rgba(240,178,92,.3);color:var(--amber)}
+.cal-foot{margin-top:var(--s4);display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-3)}
+.cal-foot i{width:4px;height:4px;border-radius:50%;background:var(--amber);box-shadow:0 0 6px rgba(240,178,92,.8)}
+
+/* ============================================================
+   10. 课程进度
+   ============================================================ */
+.course-list{display:flex;flex-direction:column;gap:var(--s5)}
+.course{ }
+.course-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:9px}
+.course-name{font-size:13.5px;color:var(--text-2)}
+.course-top b{font-family:var(--font-num);font-size:14.5px;font-weight:700;font-variant-numeric:tabular-nums}
+.course-bar{height:7px;border-radius:var(--r-full);background:rgba(255,255,255,.06);overflow:hidden}
+.course-bar i{display:block;height:100%;width:0;border-radius:inherit;transition:width 1.5s var(--ease-out-expo)}
+.course[data-c="1"] .course-bar i{background:linear-gradient(90deg,#7ba7d9,#5c9ad6)}
+.course[data-c="1"] .course-top b{color:var(--sky)}
+.course[data-c="2"] .course-bar i{background:linear-gradient(90deg,#f0b25c,#f0875a)}
+.course[data-c="2"] .course-top b{color:var(--amber)}
+.course[data-c="3"] .course-bar i{background:linear-gradient(90deg,#5cc8b2,#4aa88f)}
+.course[data-c="3"] .course-top b{color:var(--teal)}
+
+/* ============================================================
+   11. 统计卡（阅读 / 英语 / 运动）
+   ============================================================ */
+.stat-main{display:flex;align-items:flex-end;gap:var(--s3)}
+.stat-main .big{font-family:var(--font-num);font-size:44px;font-weight:750;line-height:1;letter-spacing:-1px;font-variant-numeric:tabular-nums;
+  background:linear-gradient(180deg,var(--text-1),#aab2c0);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.stat-main .unit{font-size:14px;color:var(--text-3);padding-bottom:6px}
+.stat-sub{margin-top:var(--s3);display:flex;flex-wrap:wrap;gap:6px}
+.stat-pill{font-size:12px;color:var(--text-2);padding:5px 12px;border-radius:var(--r-full);background:rgba(255,255,255,.045);border:1px solid var(--line);white-space:nowrap}
+.stat-pill b{color:var(--text-1);font-weight:600;font-family:var(--font-num)}
+.stat-foot{margin-top:var(--s4);padding-top:var(--s4);border-top:1px dashed var(--line-strong);font-size:12.5px;color:var(--text-3);display:flex;align-items:center;gap:8px}
+.stat-foot .dotc{width:8px;height:8px;border-radius:3px;flex-shrink:0}
+.c-reading .stat-foot .dotc{background:var(--grad-amber)}
+.c-english .stat-foot .dotc{background:linear-gradient(135deg,#f2a0b0,#f26d85)}
+.c-sport .stat-foot .dotc{background:linear-gradient(135deg,#5cc8b2,#e6b45c)}
+.c-reading .ico{color:var(--amber)}
+.c-english .ico{color:var(--rose)}
+.c-sport .ico{color:var(--teal)}
+
+/* 阅读卡迷你书封 */
+.book-cover{display:inline-flex;align-items:center;gap:11px;margin-top:var(--s4);padding:10px 14px;border-radius:var(--r-md);background:rgba(255,255,255,.035);border:1px solid var(--line);transition:all var(--t-med) var(--ease-out-quart)}
+.card:hover .book-cover{background:rgba(240,178,92,.06);border-color:rgba(240,178,92,.3)}
+.book-cover .cover{width:30px;height:40px;border-radius:5px;background:linear-gradient(150deg,#e8b46a,#d97b52);position:relative;flex-shrink:0;box-shadow:0 4px 10px -3px rgba(0,0,0,.5)}
+.book-cover .cover::after{content:"";position:absolute;left:4px;top:0;bottom:0;width:1.5px;background:rgba(255,255,255,.35)}
+.book-cover .t{font-size:12.5px;color:var(--text-1)}
+.book-cover .t small{display:block;color:var(--text-3);font-size:11px;margin-top:2px}
+
+/* ============================================================
+   12. 成长数据带
+   ============================================================ */
+.growth{display:flex;align-items:center;gap:var(--s6);flex-wrap:wrap}
+.growth-metrics{flex:1;display:grid;grid-template-columns:repeat(3,1fr);gap:var(--s4);min-width:280px}
+.gm{text-align:left}
+.gm .gv{font-family:var(--font-num);font-size:clamp(24px,2.6vw,32px);font-weight:750;font-variant-numeric:tabular-nums;line-height:1.1;
+  background:var(--grad-amber);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.gm[data-c="teal"] .gv{background:linear-gradient(135deg,#5cc8b2,#7ec98f);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.gm[data-c="sky"] .gv{background:linear-gradient(135deg,#7ba7d9,#a7c6f0);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.gm .gl{font-size:12.5px;color:var(--text-3);margin-top:6px;letter-spacing:.5px}
+.gm .gl em{font-style:normal;display:block;font-size:11px;color:var(--text-3);opacity:.7;margin-top:2px}
+.growth-cta{flex-shrink:0}
+.growth-badge{position:absolute;top:var(--s5);right:var(--s5);display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--teal);background:rgba(92,200,178,.1);border:1px solid rgba(92,200,178,.25);padding:5px 12px;border-radius:var(--r-full);letter-spacing:.5px}
+.growth-badge svg{width:12px;height:12px;stroke:currentColor;stroke-width:2;fill:none}
+
+/* 页脚 */
+.footer{text-align:center;padding:var(--s12) 0 var(--s4);color:var(--text-3);font-size:12.5px;letter-spacing:1px}
+.footer b{color:var(--text-2);font-weight:600}
+
+/* ============================================================
+   13. 入场动效 & 响应式
+   ============================================================ */
+.reveal{opacity:0;transform:translateY(26px);transition:opacity .9s var(--ease-out-quart),transform .9s var(--ease-out-expo);transition-delay:var(--d,0s)}
+.reveal.in{opacity:1;transform:none}
+
+@media (max-width:1024px){
+  .col-5,.col-7,.col-4,.col-8{grid-column:span 12}
+  .hero{flex-wrap:wrap}
+}
+@media (max-width:640px){
+  .wrap{padding-top:var(--s4)}
+  .chip-date span.txt{display:none}
+  .growth-metrics{grid-template-columns:1fr}
+  .hero-ring{width:150px;height:150px}
+}
+
+/* 无障碍：减少动效偏好 */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important}
+  html{scroll-behavior:auto}
+}
+</style>
+</head>
+<body>
+
+<!-- 环境层 -->
+<div class="aurora" aria-hidden="true"><i class="a1"></i><i class="a2"></i><i class="a3"></i></div>
+<div class="gridline" aria-hidden="true"></div>
+<div class="grain" aria-hidden="true"></div>
+
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f5c06a"/>
+      <stop offset="55%" stop-color="#f0975a"/>
+      <stop offset="100%" stop-color="#f07a5a"/>
+    </linearGradient>
+  </defs>
+</svg>
+
+<div class="wrap">
+
+  <!-- 顶栏 -->
+  <header class="topbar reveal in">
+    <a class="brand" href="#" aria-label="晨光自律台首页">
+      <span class="brand-mark">
+        <svg viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 15l.9 2.6L22.5 18.5l-2.6.9L19 22l-.9-2.6-2.6-.9 2.6-.9z"/></svg>
+      </span>
+      <span>
+        <span class="brand-name">晨光<em>自律台</em></span>
+        <span class="brand-sub">SELF-DISCIPLINE OS</span>
+      </span>
+    </a>
+    <div class="topbar-right">
+      <div class="chip-date"><span class="txt">今天是</span> <b id="dateText">2026 年 8 月 21 日 · 周五</b></div>
+      <a class="btn btn-ghost" href="login.html" style="padding:8px 16px;font-size:13px">登录</a>
+      <div class="avatar" role="img" aria-label="小柚的头像">🍊</div>
+    </div>
+  </header>
+
+  <main class="grid">
+
+    <!-- Hero：今日焦点 -->
+    <section class="card col-7 reveal" style="--d:.05s" aria-label="今日焦点">
+      <div class="card-pad hero">
+        <div class="hero-greet">
+          <span class="hero-eyebrow" id="greetText">GOOD MORNING · 早安</span>
+          <h1 id="greetMain">早上好，小柚<br>今天也<span>闪闪发光</span>吧</h1>
+          <p class="hero-quote">「每天进步一点点，自律让我自由。」今日已专注 <b id="heroFocus">0</b> 分钟，计划完成 <b id="heroPct">0</b>%。</p>
+          <div class="hero-actions">
+            <button class="btn btn-primary" type="button">
+              <svg viewBox="0 0 24 24"><path d="M5 3l14 9-14 9V3z"/></svg>
+              开始专注
+            </button>
+            <button class="btn btn-ghost" type="button">
+              <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+              记录打卡
+            </button>
+          </div>
+        </div>
+        <div class="hero-ring" role="img" aria-label="今日计划完成 40%">
+          <svg viewBox="0 0 170 170">
+            <circle class="track" cx="85" cy="85" r="76"></circle>
+            <circle class="bar" cx="85" cy="85" r="76" data-ring="40"></circle>
+          </svg>
+          <div class="num"><b data-count="40" data-suffix="%">0%</b><small>今日计划</small></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 我的资料 -->
+    <aside class="card col-5 reveal" style="--d:.12s" aria-label="我的资料">
+      <div class="profile">
+        <div class="profile-avatar">🍊</div>
+        <h3>小柚</h3>
+        <span class="tag"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg> 连续自律 <b id="streakNum">12</b> 天</span>
+        <p class="motto">每天进步一点点<br>自律让我自由</p>
+        <button class="btn btn-ghost edit" type="button">点击完善资料</button>
+        <div class="streak">
+          <div><b data-count="6">0</b><small>专注周数</small></div>
+          <div><b data-count="42">0</b><small>累计打卡</small></div>
+          <div><b data-count="8">0</b><small>完成课程</small></div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- 今日计划 -->
+    <section class="card col-5 reveal" style="--d:.18s" aria-label="今日计划">
+      <div class="card-pad">
+        <div class="card-head">
+          <h2 class="card-title">
+            <span class="ico"><svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span>
+            今日计划
+          </h2>
+          <a class="card-link" href="#">去管理 <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+        </div>
+
+        <div class="plan-progress">
+          <span class="meta"><b>2/5</b> 已完成</span>
+          <div class="plan-bar" role="progressbar" aria-valuenow="40" aria-valuemin="0" aria-valuemax="100"><i data-fill="40"></i></div>
+          <span class="meta">预计专注 <b>2h50m</b></span>
+        </div>
+
+        <ul class="plan-list" id="planList">
+          <li class="plan-item done" data-cat="复盘" tabindex="0" role="checkbox" aria-checked="true">
+            <span class="plan-check"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span>
+            <span class="plan-txt">晨间计划复盘</span><span class="plan-cat">复盘</span>
+          </li>
+          <li class="plan-item done" data-cat="运动" tabindex="0" role="checkbox" aria-checked="true">
+            <span class="plan-check"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span>
+            <span class="plan-txt">晨跑 3 公里</span><span class="plan-cat">运动</span>
+          </li>
+          <li class="plan-item" data-cat="学习" tabindex="0" role="checkbox" aria-checked="false">
+            <span class="plan-check"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span>
+            <span class="plan-txt">完成高等数学第 3 章课后习题</span><span class="plan-cat">学习</span>
+          </li>
+          <li class="plan-item" data-cat="英语" tabindex="0" role="checkbox" aria-checked="false">
+            <span class="plan-check"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span>
+            <span class="plan-txt">背诵考研英语核心词汇 30 个</span><span class="plan-cat">英语</span>
+          </li>
+          <li class="plan-item" data-cat="阅读" tabindex="0" role="checkbox" aria-checked="false">
+            <span class="plan-check"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span>
+            <span class="plan-txt">阅读《被讨厌的勇气》第 2 章</span><span class="plan-cat">阅读</span>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- 日历 -->
+    <section class="card col-7 reveal" style="--d:.24s" aria-label="打卡日历">
+      <div class="card-pad">
+        <div class="cal-head">
+          <h4>2026 年 <span>8 月</span></h4>
+          <div class="cal-nav">
+            <button type="button" aria-label="上个月"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button>
+            <button type="button" aria-label="下个月"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
+          </div>
+        </div>
+        <div class="cal-week">
+          <span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span>
+        </div>
+        <div class="cal-days" id="calDays"><!-- JS 渲染 --></div>
+        <div class="cal-foot"><i></i> 有记录的日子会亮起小点 · 今天已点亮 <b id="calCount">0</b> 天</div>
+      </div>
+    </section>
+
+    <!-- 课程进度 -->
+    <section class="card col-4 reveal" style="--d:.3s" aria-label="课程进度">
+      <div class="card-pad">
+        <div class="card-head">
+          <h2 class="card-title"><span class="ico" style="color:var(--sky)"><svg viewBox="0 0 24 24"><path d="M22 10L12 5 2 10l10 5 10-5z"/><path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"/></svg></span>课程进度</h2>
+          <span class="card-link" style="cursor:default">62% 总体</span>
+        </div>
+        <div class="course-list">
+          <div class="course" data-c="1">
+            <div class="course-top"><span class="course-name">高等数学</span><b data-count="62" data-suffix="%">0%</b></div>
+            <div class="course-bar"><i data-fill="62"></i></div>
+          </div>
+          <div class="course" data-c="2">
+            <div class="course-top"><span class="course-name">大学英语</span><b data-count="48" data-suffix="%">0%</b></div>
+            <div class="course-bar"><i data-fill="48"></i></div>
+          </div>
+          <div class="course" data-c="3">
+            <div class="course-top"><span class="course-name">数据结构</span><b data-count="75" data-suffix="%">0%</b></div>
+            <div class="course-bar"><i data-fill="75"></i></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 每日阅读 -->
+    <section class="card col-4 reveal c-reading" style="--d:.36s" aria-label="每日阅读">
+      <div class="card-pad">
+        <div class="card-head">
+          <h2 class="card-title"><span class="ico"><svg viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></span>每日阅读</h2>
+        </div>
+        <div class="stat-main"><span class="big" data-count="3">0</span><span class="unit">本已读</span></div>
+        <div class="stat-sub">
+          <span class="stat-pill"><b data-count="120">0</b> 页累计</span>
+          <span class="stat-pill"><b data-count="97">0</b> 分钟</span>
+        </div>
+        <div class="book-cover">
+          <span class="cover"></span>
+          <span class="t">最近在读：被讨厌的勇气<small>第 2 章 · 继续阅读 →</small></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 英语学习 -->
+    <section class="card col-4 reveal c-english" style="--d:.42s" aria-label="英语学习">
+      <div class="card-pad">
+        <div class="card-head">
+          <h2 class="card-title"><span class="ico"><svg viewBox="0 0 24 24"><path d="M12 14a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"/><path d="M12 14v6"/><path d="M8 20h8"/></svg></span>英语学习</h2>
+        </div>
+        <div class="stat-main"><span class="big" data-count="3">0</span><span class="unit">次学习</span></div>
+        <div class="stat-sub">
+          <span class="stat-pill"><b data-count="55">0</b> 分钟累计</span>
+          <span class="stat-pill">词汇 +<b data-count="30">0</b></span>
+        </div>
+        <div class="stat-foot"><span class="dotc"></span> 连续 3 天保持英语输入</div>
+      </div>
+    </section>
+
+    <!-- 每日运动 -->
+    <section class="card col-4 reveal c-sport" style="--d:.48s" aria-label="每日运动">
+      <div class="card-pad">
+        <div class="card-head">
+          <h2 class="card-title"><span class="ico"><svg viewBox="0 0 24 24"><path d="M12 21c4.97 0 9-4.03 9-9s-4.03-9-9-9-9 4.03-9 9 4.03 9 9 9z"/><path d="M12 7v5l3 3"/></svg></span>每日运动</h2>
+        </div>
+        <div class="stat-main"><span class="big" data-count="3">0</span><span class="unit">次运动</span></div>
+        <div class="stat-sub">
+          <span class="stat-pill"><b data-count="65">0</b> 分钟</span>
+          <span class="stat-pill"><b data-count="490">0</b> 千卡</span>
+        </div>
+        <div class="stat-foot"><span class="dotc"></span> 晨跑 3 公里 · 配速 6'20"</div>
+      </div>
+    </section>
+
+    <!-- 成长数据带 -->
+    <section class="card col-12 reveal" style="--d:.54s" aria-label="成长数据">
+      <span class="growth-badge"><svg viewBox="0 0 24 24"><path d="M2 20h20"/><path d="M4 20V9m6 11V4m6 16v-9m4 9V7"/></svg> 真实记录 · 自动汇总</span>
+      <div class="card-pad growth">
+        <div class="growth-metrics">
+          <div class="gm"><div class="gv"><span data-count="170">0</span> 分</div><div class="gl">专注时长<em>本周累计 · 环比 +18%</em></div></div>
+          <div class="gm" data-c="teal"><div class="gv"><span data-count="40">0</span>%</div><div class="gl">计划完成率<em>目标 60% · 再接再厉</em></div></div>
+          <div class="gm" data-c="sky"><div class="gv"><span data-count="120">0</span> 页</div><div class="gl">累计阅读<em>约 3 本书 · 第 4 本进行中</em></div></div>
+        </div>
+        <div class="growth-cta">
+          <button class="btn btn-primary" type="button">
+            <svg viewBox="0 0 24 24"><path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z"/></svg>
+            查看完整成长报告
+          </button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="footer reveal" style="--d:.6s">
+    晨光自律台 · <b>每天进步一点点，自律让我自由</b> · 记录于 2026-08-21
+  </footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ---------- 1. 时间问候 ---------- */
+  var h = new Date().getHours();
+  var gT = document.getElementById("greetText"), gM = document.getElementById("greetMain");
+  var dateText = document.getElementById("dateText");
+  if (h < 6)       { gT.textContent = "NIGHT OWL · 夜深了"; gM.innerHTML = "夜深了，小柚<br>记得<span>早点休息</span>哦"; }
+  else if (h < 9)  { gT.textContent = "GOOD MORNING · 早安"; gM.innerHTML = "早上好，小柚<br>今天也<span>闪闪发光</span>吧"; }
+  else if (h < 12) { gT.textContent = "MORNING FOCUS · 上午专注"; gM.innerHTML = "上午好，小柚<br>让<span>效率</span>开启这一天"; }
+  else if (h < 14) { gT.textContent = "NOON RESET · 午后"; gM.innerHTML = "午后好，小柚<br>稍作休息再<span>出发</span>吧"; }
+  else if (h < 18) { gT.textContent = "AFTERNOON · 下午"; gM.innerHTML = "下午好，小柚<br>专注的每一分钟都<span>算数</span>"; }
+  else             { gT.textContent = "EVENING REVIEW · 晚间"; gM.innerHTML = "晚上好，小柚<br>今天也<span>坚持到底</span>了"; }
+  var wd = ["日","一","二","三","四","五","六"][new Date().getDay()];
+  dateText.textContent = "2026 年 8 月 21 日 · 周" + wd;
+
+  /* ---------- 2. 数字滚动 ---------- */
+  function animateCount(el){
+    var target = parseFloat(el.getAttribute("data-count"));
+    var suffix = el.getAttribute("data-suffix") || "";
+    var dur = reduce ? 0 : 1400;
+    var t0 = null;
+    function frame(ts){
+      if (!t0) t0 = ts;
+      var p = Math.min((ts - t0) / dur, 1);
+      var eased = 1 - Math.pow(1 - p, 4); /* quart out */
+      var val = Math.round(target * eased);
+      el.textContent = val + suffix;
+      if (p < 1) requestAnimationFrame(frame);
+      else el.textContent = target + suffix;
+    }
+    if (reduce) el.textContent = target + suffix; else requestAnimationFrame(frame);
+  }
+
+  /* ---------- 3. 进度条 / 进度环 ---------- */
+  var ringAnimated = false;
+  function animateRing(){
+    var ring = document.querySelector(".hero-ring .bar");
+    if (!ring) return;
+    var pct = parseFloat(ring.getAttribute("data-ring"));
+    var C = 477.5, off = C * (1 - pct / 100);
+    ring.style.strokeDashoffset = reduce ? off : C;
+    requestAnimationFrame(function(){ requestAnimationFrame(function(){ ring.style.strokeDashoffset = off; }); });
+  }
+  function fillBars(){
+    document.querySelectorAll("[data-fill]").forEach(function(el){
+      el.style.width = el.getAttribute("data-fill") + "%";
+    });
+  }
+
+  /* ---------- 4. 日历渲染（2026 年 8 月） ---------- */
+  var YEAR = 2026, MONTH = 8; /* 8 = 八月 */
+  var recorded = [3,5,7,10,12,15,18,20,22,25,27]; /* 有记录日 */
+  var today = 21;
+  var first = new Date(YEAR, MONTH - 1, 1).getDay(); /* 0=周日 */
+  var startCol = (first + 6) % 7;                    /* 周一为第一列 */
+  var daysInMonth = new Date(YEAR, MONTH, 0).getDate();
+  var html = "";
+  for (var i = 0; i < startCol; i++) html += '<span class="cal-day empty"></span>';
+  for (var d = 1; d <= daysInMonth; d++){
+    var cls = "cal-day";
+    if (d === today) cls += " today";
+    else if (recorded.indexOf(d) > -1) cls += " high";
+    html += '<span class="'+cls+'" aria-label="8月'+d+'日">'+d+
+            (recorded.indexOf(d) > -1 || d === today ? '<i class="dot"></i>' : '')+'</span>';
+  }
+  document.getElementById("calDays").innerHTML = html;
+  document.getElementById("calCount").textContent = recorded.length;
+
+  /* ---------- 5. 计划项交互（点击打勾） ---------- */
+  var planList = document.getElementById("planList");
+  var doneCount = 0, totalCount = planList.children.length;
+  function refreshPlan(){
+    doneCount = planList.querySelectorAll(".plan-item.done").length;
+    var pct = Math.round(doneCount / totalCount * 100);
+    var bar = document.querySelector(".plan-bar i"), meta = document.querySelector(".plan-progress .meta b");
+    if (bar) bar.style.width = pct + "%";
+    if (meta) meta.textContent = doneCount + "/" + totalCount;
+    var ring = document.querySelector(".hero-ring .bar");
+    if (ring){ var C = 477.5; ring.style.strokeDashoffset = C * (1 - pct / 100); }
+    var ringNum = document.querySelector(".hero-ring .num b");
+    if (ringNum) ringNum.textContent = pct + "%";
+  }
+  [].forEach.call(planList.children, function(item){
+    item.addEventListener("click", function(){
+      this.classList.toggle("done");
+      this.setAttribute("aria-checked", this.classList.contains("done"));
+      refreshPlan();
+    });
+    item.addEventListener("keydown", function(e){
+      if (e.key === " " || e.key === "Enter"){ e.preventDefault(); this.click(); }
+    });
+  });
+  refreshPlan(); /* 初始同步 2/5=40% */
+
+  /* ---------- 6. 滚动入场 + 鼠标视差光晕 ---------- */
+  var reveals = document.querySelectorAll(".reveal");
+  if ("IntersectionObserver" in window && !reduce){
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(en){
+        if (en.isIntersecting){
+          en.target.classList.add("in");
+          /* 触发内部动效 */
+          en.target.querySelectorAll("[data-count]").forEach(animateCount);
+          en.target.querySelectorAll("[data-fill]").forEach(function(el){
+            setTimeout(function(){ el.style.width = el.getAttribute("data-fill") + "%"; }, 150);
+          });
+          if (!ringAnimated && en.target.querySelector(".hero-ring")){ animateRing(); ringAnimated = true; }
+          io.unobserve(en.target);
+        }
+      });
+    }, {threshold: 0.12});
+    reveals.forEach(function(r){ io.observe(r); });
+  } else {
+    reveals.forEach(function(r){
+      r.classList.add("in");
+      document.querySelectorAll("[data-count]").forEach(animateCount);
+      document.querySelectorAll("[data-fill]").forEach(function(el){ el.style.width = el.getAttribute("data-fill") + "%"; });
+    });
+    animateRing();
+  }
+
+  /* 鼠标视差光晕（性能友好：仅桌面 hover 设备） */
+  if (window.matchMedia("(hover:hover)").matches && !reduce){
+    document.querySelectorAll(".card").forEach(function(card){
+      card.addEventListener("mousemove", function(e){
+        var r = card.getBoundingClientRect();
+        card.style.setProperty("--mx", ((e.clientX - r.left) / r.width * 100) + "%");
+        card.style.setProperty("--my", ((e.clientY - r.top) / r.height * 100) + "%");
+      });
+    });
+  }
+})();
+</script>
+</body>
 </html>
