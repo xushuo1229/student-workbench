@@ -1,7 +1,8 @@
 import { createClient } from '@supabase/supabase-js'
 
-const SUPABASE_URL = 'https://gidbmdeawvxpfudcvoxfg.supabase.co'
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmVzIiwicm9sZSI6ImFub24iLCJleHAiOjE5NjM4MDczODZ9'
+/* ---- 单点配置：所有模块统一从这里取 Supabase 实例与表名 ---- */
+export const SUPABASE_URL = 'https://gidbmdeawvxpfudcvoxfg.supabase.co'
+export const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmVzIiwicm9sZSI6ImFub24iLCJleHAiOjE5NjM4MDczODZ9'
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
@@ -10,11 +11,40 @@ export const USER_DATA_TABLE = 'user_data'
 export const USERS_TABLE = 'wb_users'
 
 /**
- * ============================================================
- *  SQL to run in Supabase SQL Editor (run ALL below at once)
- * ============================================================
+ * 统一密码哈希：SHA-256 + 固定盐，防彩虹表。
+ * 所有注册/登录校验必须使用本函数，严禁在别处重复实现哈希逻辑。
+ */
+const PASSWORD_SALT = '_swb_salt_v1'
+
+export async function hashPassword(password) {
+  const encoder = new TextEncoder()
+  const data = encoder.encode(password + PASSWORD_SALT)
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+  return Array.from(new Uint8Array(hashBuffer))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+}
+
+/**
+ * 兼容校验：先用带盐哈希比对，失败再尝试旧版无盐哈希（历史账号迁移用）。
+ * 校验通过且为旧格式时返回 true，调用方可将密码升级为新哈希。
+ */
+export async function verifyPassword(password, storedHash) {
+  if (!storedHash) return false
+  const salted = await hashPassword(password)
+  if (salted === storedHash) return true
+  // Legacy: 无盐 SHA-256（旧版本 StoreContext 生成的账号）
+  const encoder = new TextEncoder()
+  const legacy = await crypto.subtle.digest('SHA-256', encoder.encode(password))
+  const legacyHex = Array.from(new Uint8Array(legacy))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+  return legacyHex === storedHash
+}
+
+/* ============================================================
+ * 建表 SQL（在 Supabase SQL Editor 中执行一次）：
  *
- * -- 1. Users table: no email, no confirmation. Plain username + hashed password.
  * CREATE TABLE IF NOT EXISTS public.wb_users (
  *   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
  *   username TEXT NOT NULL UNIQUE,
@@ -28,7 +58,6 @@ export const USERS_TABLE = 'wb_users'
  *   created_at TIMESTAMPTZ DEFAULT now()
  * );
  *
- * -- 2. User app data table (per-user, referenced by user_id)
  * CREATE TABLE IF NOT EXISTS public.user_data (
  *   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
  *   user_id UUID NOT NULL REFERENCES public.wb_users(id) ON DELETE CASCADE,
@@ -37,12 +66,6 @@ export const USERS_TABLE = 'wb_users'
  *   UNIQUE(user_id)
  * );
  *
- * -- 3. Security notes:
- * --    RLS is left DISABLED. The anon key allows full access, but the
- *    design is still safe for a personal tool:
- *    - Passwords are SHA-256 hashed (never stored in plaintext)
- *    - user_data is keyed by random UUID (unguessable)
- *    - You can only read a user's data if you know their UUID
- *
- * -- If you want stricter isolation later, enable RLS with a service role.
- */
+ * -- 安全建议：请务必启用 RLS 并收紧 anon key 权限，生产环境不应依赖
+ * -- "UUID 不可猜测"作为唯一防线。具体策略见项目报告。
+ * ============================================================ */

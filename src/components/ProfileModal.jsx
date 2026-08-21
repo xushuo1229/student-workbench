@@ -6,9 +6,7 @@ import { Button } from './ui/Modal'
 import { Avatar } from './ui/Avatar'
 import { clsx } from '../lib/clsx'
 import { fileToAvatarDataUrl } from '../lib/avatar'
-
-const AVATARS = ['🍊', '🐱', '🐰', '🦊', '🐼', '🌟', '🍎', '🌈', '🐻', '🦄', '🐯', '🌸']
-const GRADES = ['大一', '大二', '大三', '大四', '研究生', '其他']
+import { AVATARS, GRADES } from '../lib/constants'
 
 function UserFields({ form, setForm }) {
   const handleAvatarUpload = async (e) => {
@@ -186,7 +184,7 @@ export function ProfileModal({ mode = 'manage' }) {
               <div className="flex flex-col items-center py-2">
                 <Avatar value={data.user.avatar} size={80} className="shadow-glass" />
                 <p className="mt-3 text-lg font-bold text-slate-800">{data.user.name}</p>
-                {data.data?.currentUser && (
+                {data.currentUser && (
                   <p className="mt-0.5 text-xs text-slate-400">@{data.currentUser}</p>
                 )}
                 {data.user.motto && (

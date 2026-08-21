@@ -6,19 +6,7 @@ import { Button } from './ui/Modal'
 import { Avatar } from './ui/Avatar'
 import { clsx } from '../lib/clsx'
 import { fileToAvatarDataUrl } from '../lib/avatar'
-
-const AVATARS = ['🍊', '🐱', '🐰', '🦊', '🐼', '🌟', '🍎', '🌈', '🐻', '🦄', '🐯', '🌸']
-const GRADES = ['大一', '大二', '大三', '大四', '研究生', '其他']
-
-/* Simple hash for localStorage — NOT cryptographically secure,
-   but sufficient to prevent plaintext passwords in browser storage. */
-async function hashPassword(password) {
-  const encoder = new TextEncoder()
-  const data = encoder.encode(password + '_swb_salt_v1')
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
-  const hashArray = Array.from(new Uint8Array(hashBuffer))
-  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('')
-}
+import { AVATARS, GRADES } from '../lib/constants'
 
 export function AuthModal() {
   const { data, registerUser, loginUserWithPassword, pushToast } = useStore()
@@ -92,7 +80,7 @@ export function AuthModal() {
     if (!u) { setError('请输入用户名'); return }
     if (u.length < 1 || u.length > 20) { setError('用户名需 1-20 个字符'); return }
     if (!p) { setError('请设置密码'); return }
-    if (p.length < 4) { setError('密码至少 4 位'); return }
+    if (p.length < 6) { setError('密码至少 6 位'); return }
     if (p !== cp) { setError('两次密码不一致'); return }
 
     setLoading(true)
@@ -112,7 +100,8 @@ export function AuthModal() {
         setError('该用户名已被注册')
       }
     } catch (e) {
-      setError('注册失败，请重试')
+      // 透传真实错误（如「该用户名已被注册」），便于用户理解
+      setError(e.message || '注册失败，请重试')
     }
     setLoading(false)
   }
@@ -291,7 +280,7 @@ export function AuthModal() {
                 {inputField('昵称', regForm.name, (v) => setRegForm({ ...regForm, name: v }), { placeholder: '显示名称（可选）', autoComplete: 'nickname' })}
               </div>
 
-              {passwordField('密码 *', regForm.password, (v) => setRegForm({ ...regForm, password: v }), showRegPass, setShowRegPass, { placeholder: '至少4位', autoComplete: 'new-password' })}
+              {passwordField('密码 *', regForm.password, (v) => setRegForm({ ...regForm, password: v }), showRegPass, setShowRegPass, { placeholder: '至少6位', autoComplete: 'new-password' })}
               {passwordField('确认密码 *', regForm.confirmPassword, (v) => setRegForm({ ...regForm, confirmPassword: v }), showRegConfirm, setShowRegConfirm, { placeholder: '再次输入密码', autoComplete: 'new-password' })}
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

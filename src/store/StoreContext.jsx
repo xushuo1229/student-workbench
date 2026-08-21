@@ -2,20 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback, useRef } f
 import { createPortal } from 'react-dom'
 import { initialData } from '../data/initialData'
 import { uid } from '../lib/format'
-
-/* ---- Supabase (optional — graceful fallback if unavailable) ---- */
-let supabase = null
-let USER_DATA_TABLE = 'user_data'
-let USERS_TABLE = 'wb_users'
-try {
-  const sb = require('@supabase/supabase-js')
-  supabase = sb.createClient(
-    'https://gidbmdeawvxpfudcvoxfg.supabase.co',
-    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmVzIiwicm9sZSI6ImFub24iLCJleHAiOjE5NjM4MDczODZ9',
-  )
-} catch (e) {
-  /* Supabase not available — pure local mode */
-}
+import { supabase, USER_DATA_TABLE, USERS_TABLE, hashPassword, verifyPassword } from '../lib/supabase'
 
 /* ---- Local storage keys ---- */
 const LOCAL_SETTINGS_KEY = 'student-workbench-settings'
@@ -25,16 +12,6 @@ const LOCAL_ACCOUNTS_KEY = 'student-workbench-accounts' // legacy + fallback
 const LOCAL_DATA_KEY = 'student-workbench-v1' // legacy data key
 
 const StoreContext = createContext(null)
-
-/* ---- SHA-256 password hashing ---- */
-async function hashPassword(password) {
-  const encoder = new TextEncoder()
-  const bytes = encoder.encode(password)
-  const hashBuffer = await crypto.subtle.digest('SHA-256', bytes)
-  return Array.from(new Uint8Array(hashBuffer))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('')
-}
 
 /* ---- Local settings (background etc, shared across users) ---- */
 function loadLocalSettings() {
@@ -144,32 +121,43 @@ async function pushCloudData(userId, appData) {
 async function cloudRegisterUser(username, passwordHash, profile) {
   if (!supabase) return null
 
-  // Check existing
-  const { data: existing } = await supabase
-    .from(USERS_TABLE)
-    .select('id')
-    .eq('username', username)
-    .maybeSingle()
+  // Check existing — 网络/表缺失视为云端不可用（返回 null 触发本地降级）
+  let existing = null
+  try {
+    const { data } = await supabase
+      .from(USERS_TABLE)
+      .select('id')
+      .eq('username', username)
+      .maybeSingle()
+    existing = data
+  } catch (e) {
+    return null // 网络错误 → 云端不可用
+  }
   if (existing) throw new Error('该用户名已被注册')
 
-  // Insert
-  const { data: newUser, error } = await supabase
-    .from(USERS_TABLE)
-    .insert({
-      username,
-      password_hash: passwordHash,
-      display_name: profile.name || username,
-      avatar: profile.avatar || '🍊',
-      school: profile.school || '',
-      major: profile.major || '',
-      grade: profile.grade || '',
-      motto: profile.motto || '',
-    })
-    .select()
-    .single()
+  // Insert — 业务错误（唯一约束等）直接抛出；网络错误降级
+  try {
+    const { data: newUser, error } = await supabase
+      .from(USERS_TABLE)
+      .insert({
+        username,
+        password_hash: passwordHash,
+        display_name: profile.name || username,
+        avatar: profile.avatar || '🍊',
+        school: profile.school || '',
+        major: profile.major || '',
+        grade: profile.grade || '',
+        motto: profile.motto || '',
+      })
+      .select()
+      .single()
 
-  if (error) throw new Error(error.message)
-  return newUser
+    if (error) throw new Error('该用户名已被注册')
+    return newUser
+  } catch (e) {
+    if (e.message === '该用户名已被注册') throw e
+    return null // 网络/其他错误 → 降级本地
+  }
 }
 
 async function cloudLoginUser(username, passwordHash) {
@@ -181,11 +169,29 @@ async function cloudLoginUser(username, passwordHash) {
     .eq('username', username)
     .maybeSingle()
 
-  if (error) throw new Error('登录失败，请检查网络')
-  if (!userRow) return null // User not found in cloud
+  if (error) return null // 网络/表缺失 → 云端不可用
+  if (!userRow) return null // 云端无此用户 → 交给本地兜底
   if (userRow.password_hash !== passwordHash) throw new Error('密码错误')
 
   return userRow
+}
+
+/* 备份合并：对象浅合并 + 列表按 id 深度合并（保留现有记录，补充备份中新的） */
+const LIST_KEYS = ['plans', 'courses', 'readings', 'english', 'sports', 'weeklyPlan']
+
+function mergeAppData(existing, incoming) {
+  const out = { ...(existing || {}), ...(incoming || {}) }
+  for (const key of LIST_KEYS) {
+    const a = (existing && existing[key]) || []
+    const b = (incoming && incoming[key]) || []
+    if (!Array.isArray(a) || !Array.isArray(b)) {
+      out[key] = Array.isArray(b) ? b : []
+      continue
+    }
+    const ids = new Set(a.map((x) => x && x.id).filter(Boolean))
+    out[key] = [...a, ...b.filter((x) => x && !ids.has(x.id))]
+  }
+  return out
 }
 
 export function StoreProvider({ children }) {
@@ -197,10 +203,14 @@ export function StoreProvider({ children }) {
   const [toasts, setToasts] = useState([])
   const [profileOpen, setProfileOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [syncState, setSyncState] = useState('idle') // 'idle' | 'syncing' | 'synced' | 'offline' | 'local'
 
   const userIdRef = useRef(null)
   const cloudSyncTimer = useRef(null)
+  const cloudRetryTimer = useRef(null)
   const isCloudMode = useRef(false)
+  const dataRef = useRef(data)
+  useEffect(() => { dataRef.current = data }, [data])
 
   // ---- On mount: restore session ----
   useEffect(() => {
@@ -238,7 +248,7 @@ export function StoreProvider({ children }) {
     }
   }
 
-  // ---- Auto-sync to cloud on data changes (debounced) ----
+  // ---- Auto-sync to cloud on data changes (debounced + offline retry) ----
   useEffect(() => {
     if (!userIdRef.current || !data.isLoggedIn) return
     if (cloudSyncTimer.current) clearTimeout(cloudSyncTimer.current)
@@ -253,9 +263,22 @@ export function StoreProvider({ children }) {
         saveUserData(data.currentUser, data)
       }
 
-      // Try cloud sync (silent fail)
+      // Try cloud sync
       if (isCloudMode.current) {
-        await pushCloudData(userId, data)
+        setSyncState('syncing')
+        const ok = await pushCloudData(userId, data)
+        setSyncState(ok ? 'synced' : 'offline')
+        if (!ok) {
+          // 同步失败：30s 后自动重试一次（防抖期间的新变更会重新触发本流程）
+          if (cloudRetryTimer.current) clearTimeout(cloudRetryTimer.current)
+          cloudRetryTimer.current = setTimeout(async () => {
+            setSyncState('syncing')
+            const retryOk = await pushCloudData(userIdRef.current, dataRef.current)
+            setSyncState(retryOk ? 'synced' : 'offline')
+          }, 30000)
+        }
+      } else {
+        setSyncState('local')
       }
     }, 800)
 
@@ -396,6 +419,32 @@ export function StoreProvider({ children }) {
     pushToast('已恢复示例数据')
   }, [pushToast])
 
+  /* 清空当前账号全部记录（保留个人资料与设置），云端同步清空 */
+  const clearAllData = useCallback(async () => {
+    const empty = {
+      ...initialData,
+      plans: [],
+      courses: [],
+      readings: [],
+      english: [],
+      sports: [],
+      weeklyPlan: [],
+    }
+    setData((d) => ({
+      ...empty,
+      isLoggedIn: true,
+      currentUser: d.currentUser,
+      user: d.user,
+      settings: d.settings || loadLocalSettings(),
+    }))
+    if (isCloudMode.current && userIdRef.current) {
+      setSyncState('syncing')
+      const ok = await pushCloudData(userIdRef.current, { ...empty, isLoggedIn: true, currentUser: data.currentUser })
+      setSyncState(ok ? 'synced' : 'offline')
+    }
+    pushToast('已清空全部记录')
+  }, [pushToast, data.currentUser])
+
   /* ==================== AUTH: Register (hybrid: cloud first → local fallback) ==================== */
   const registerUser = useCallback(async (username, password, profile) => {
     const passwordHash = await hashPassword(password)
@@ -427,7 +476,8 @@ export function StoreProvider({ children }) {
           return true
         }
       } catch (e) {
-        // Cloud failed (table missing, network error, etc.) → fall through to local
+        // 业务错误（用户名已注册等）透传给 UI；仅云端不可用时降级本地
+        if (e.message === '该用户名已被注册') throw e
         console.warn('Cloud register failed, falling back to local:', e.message)
       }
     }
@@ -514,8 +564,17 @@ export function StoreProvider({ children }) {
       throw new Error('账号不存在或密码错误，请先注册')
     }
 
-    if (account.passwordHash !== passwordHash) {
+    // 兼容校验：带盐哈希优先，旧版无盐哈希兜底
+    const passOk = await verifyPassword(password, account.passwordHash)
+    if (!passOk) {
       throw new Error('密码错误，请重试')
+    }
+
+    // 旧格式哈希自动升级为带盐哈希
+    const newHash = await hashPassword(password)
+    if (account.passwordHash !== newHash) {
+      accounts[username] = { ...account, passwordHash: newHash }
+      saveAccounts(accounts)
     }
 
     // Local login success!
@@ -583,7 +642,10 @@ export function StoreProvider({ children }) {
   const logoutUser = useCallback(async () => {
     userIdRef.current = null
     isCloudMode.current = false
+    if (cloudRetryTimer.current) clearTimeout(cloudRetryTimer.current)
+    cloudRetryTimer.current = null
     clearSession()
+    setSyncState('idle')
     setData((d) => ({
       ...initialData,
       settings: d.settings || loadLocalSettings(),
@@ -612,15 +674,11 @@ export function StoreProvider({ children }) {
     const session = loadSession()
     if (!session?.username) throw new Error('请先登录')
 
-    let appData = null
-    if (session.mode === 'cloud' && session.userId) {
-      appData = await fetchCloudData(session.userId)
-    }
-    if (!appData) {
-      appData = loadUserData(session.username) || data
-    }
-
+    // 以内存中的最新数据为准（云同步可能有延迟，读内存最可靠）
+    const appData = data
     const localSettings = loadLocalSettings()
+    const accounts = loadAccounts()
+    const account = accounts[session.username] || null
 
     return {
       version: 1,
@@ -630,6 +688,7 @@ export function StoreProvider({ children }) {
       username: session.username,
       appData,
       settings: localSettings,
+      account,
     }
   }, [data])
 
@@ -647,7 +706,7 @@ export function StoreProvider({ children }) {
         ? await fetchCloudData(session.userId)
         : null
       if (!existing) existing = loadUserData(session.username)
-      mergedData = { ...(existing || {}), ...(jsonObj.appData || {}) }
+      mergedData = mergeAppData(existing, jsonObj.appData || {})
     }
 
     // Save imported data
@@ -697,8 +756,10 @@ export function StoreProvider({ children }) {
     addSport, updateSport, deleteSport,
     addWeekly, updateWeekly, deleteWeekly, toggleWeekly,
     resetAll,
+    clearAllData,
     exportAllData,
     importAllData,
+    syncState,
   }
 
   return (

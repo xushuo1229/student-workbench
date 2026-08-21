@@ -98,8 +98,17 @@ const PRESET_BACKGROUNDS = [
   },
 ]
 
+/* 云同步状态文案 */
+const syncLabel = {
+  idle: '尚未同步',
+  syncing: '同步中…',
+  synced: '☁️ 已同步到云端',
+  offline: '⚠️ 云端不可用，本地保存，自动重试',
+  local: '📱 本地模式',
+}
+
 export function SettingsModal() {
-  const { data, updateSettings, settingsOpen, closeSettings, resetAll, exportAllData, importAllData, pushToast } = useStore()
+  const { data, updateSettings, settingsOpen, closeSettings, clearAllData, exportAllData, importAllData, pushToast, syncState } = useStore()
   const fileInputRef = useRef(null)
   const importInputRef = useRef(null)
   const [uploading, setUploading] = useState(false)
@@ -169,8 +178,7 @@ export function SettingsModal() {
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
 
-      const userCount = Object.keys(exportData.accounts || {}).length
-      pushToast(`已导出 ${userCount} 个账号的数据 ✅`)
+      pushToast('已导出当前账号数据 ✅')
     } catch (e) {
       pushToast('导出失败，请重试')
     }
@@ -345,13 +353,17 @@ export function SettingsModal() {
 
           {/* Cross-device sync */}
           <div className="mb-4 rounded-xl bg-blue-50/70 p-4">
-            <div className="mb-3 flex items-center gap-2 text-blue-700">
-              <Smartphone size={16} />
-              <span className="text-xs font-semibold">跨设备同步</span>
+            <div className="mb-3 flex items-center justify-between">
+              <div className="flex items-center gap-2 text-blue-700">
+                <Smartphone size={16} />
+                <span className="text-xs font-semibold">跨设备同步</span>
+              </div>
+              <span className="rounded-full bg-white/80 px-2.5 py-1 text-[10px] font-medium text-blue-700">
+                {syncLabel[syncState] || syncLabel.idle}
+              </span>
             </div>
             <p className="mb-3 text-[11px] leading-relaxed text-slate-500">
-              在电脑上导出数据文件，然后在手机（或其他设备）上导入，即可同步所有账号和数据。
-              每个用户的数据完全独立，互不干扰。
+              使用同一账号登录即可跨设备同步。网络不可用时数据保留在本地，联网后自动恢复同步。
             </p>
             <div className="flex flex-wrap gap-2">
               {/* Export */}
@@ -390,19 +402,19 @@ export function SettingsModal() {
           {/* Danger zone: reset */}
           <div className="rounded-xl bg-rose-50/60 p-4">
             <p className="mb-3 text-xs text-slate-500">
-              以下操作会影响当前用户的数据，请谨慎操作。
+              以下操作会清空当前用户的数据，请谨慎操作。
             </p>
             <div className="flex gap-2">
               <Button
                 variant="danger"
                 size="sm"
                 onClick={() => {
-                  if (confirm('确定要清除当前用户的所有数据并恢复到初始状态吗？此操作不可撤销。')) {
-                    resetAll()
+                  if (confirm('确定清空当前账号的全部计划、课程、阅读、英语、运动和成长记录吗？\n（个人资料与外观设置会保留，此操作不可撤销）')) {
+                    clearAllData()
                   }
                 }}
               >
-                重置我的数据
+                清空我的数据
               </Button>
             </div>
           </div>

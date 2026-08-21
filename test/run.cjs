@@ -184,12 +184,16 @@ function readStoreFromDOM() {
   try {
     const fs = require('fs')
     const storeSrc = fs.readFileSync(path.resolve(__dirname, '../src/store/StoreContext.jsx'), 'utf8')
-    assert(storeSrc.includes('USERS_TABLE') && storeSrc.includes('wb_users'), 'StoreContext 使用自定义用户表 wb_users')
-    assert(storeSrc.includes('hashPassword'), 'StoreContext 使用 SHA-256 密码哈希')
+    const supabaseSrc = fs.readFileSync(path.resolve(__dirname, '../src/lib/supabase.js'), 'utf8')
+    assert(storeSrc.includes('USERS_TABLE') && supabaseSrc.includes('wb_users'), 'StoreContext 使用自定义用户表 wb_users')
+    assert(storeSrc.includes('hashPassword'), 'StoreContext 使用统一 SHA-256 密码哈希')
+    assert(!storeSrc.includes("require('@supabase") && !storeSrc.includes('require("@supabase'), 'StoreContext 不再使用浏览器不兼容的 require 加载 Supabase（云同步修复）')
     assert(storeSrc.includes('pushCloudData'), 'StoreContext 包含云端数据推送函数')
     assert(storeSrc.includes('fetchCloudData'), 'StoreContext 包含云端数据拉取函数')
     assert(storeSrc.includes('saveSession') && storeSrc.includes('loadSession'), 'StoreContext 使用本地会话持久化')
     assert(storeSrc.includes('exportAllData') && storeSrc.includes('importAllData'), '保留导出/导入功能')
+    assert(storeSrc.includes('clearAllData'), 'StoreContext 提供清空数据功能')
+    assert(storeSrc.includes('syncState'), 'StoreContext 提供云同步状态')
   } catch (e) {
     assert(false, 'StoreContext 源码检查失败: ' + e.message)
   }

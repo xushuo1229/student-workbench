@@ -26,7 +26,7 @@ const hour = new Date().getHours()
 const greeting = hour < 11 ? '早上好' : hour < 18 ? '下午好' : '晚上好'
 
 export function Home() {
-  const { data, setActivePage, pushToast, openProfile } = useStore()
+  const { data, setActivePage, openProfile } = useStore()
   const today = todayStr()
 
   const todaysPlans = data.plans.filter((p) => p.date === today)
@@ -66,7 +66,7 @@ export function Home() {
             <Button
               variant="outline"
               className="border-white/40 bg-white/15 text-white hover:bg-white/25"
-              onClick={() => pushToast('加油，你可以的！')}
+              onClick={() => setActivePage('plan')}
             >
               <Flame size={16} /> 开始专注
             </Button>
