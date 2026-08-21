@@ -9,7 +9,7 @@ export function fileToAvatarDataUrl(file, maxSize = 160) {
     const reader = new FileReader()
     reader.onerror = () => reject(new Error('读取失败'))
     reader.onload = () => {
-      const img = new Image()
+      const img = new window.Image()
       img.onerror = () => reject(new Error('图片解析失败'))
       img.onload = () => {
         const scale = Math.min(1, maxSize / Math.max(img.width || maxSize, img.height || maxSize))

@@ -14,7 +14,7 @@ function fileToBgDataUrl(file, maxSize = 960) {
     // Step 1: Create object URL — instant (no file reading needed yet)
     const objectUrl = URL.createObjectURL(file)
 
-    const img = new Image()
+    const img = new window.Image()
     img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error('图片解析失败')) }
     img.onload = () => {
       // Step 2: Downscale aggressively — 960px long edge is plenty for a bg
