@@ -91,6 +91,33 @@ body{font-family:var(--font-display);background:var(--bg-0);color:var(--text-1);
 .profile-avatar{width:86px;height:86px;margin:0 auto var(--s4);border-radius:28px;background:linear-gradient(135deg,#ffd9a8,#f0a05a 60%,#e8734f);display:grid;place-items:center;font-size:44px;box-shadow:0 18px 40px -12px rgba(240,160,90,.55);position:relative;transition:transform var(--t-med) var(--ease-out-expo)}
 .card:hover .profile-avatar{transform:scale(1.06) rotate(-3deg)}
 .profile-avatar::after{content:"✦";position:absolute;top:-9px;right:-9px;width:26px;height:26px;border-radius:50%;background:var(--bg-1);border:1px solid var(--line-strong);display:grid;place-items:center;font-size:12px;color:var(--amber)}
+.profile-avatar > img,.chip-user .ava > img,.modal-preview > img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit;display:none}
+.profile-avatar.has-image > img,.chip-user .ava.has-image > img,.modal-preview.has-image > img{display:block}
+.profile-avatar.has-image > .ava-emoji,.chip-user .ava.has-image > .ava-emoji,.modal-preview.has-image > .ava-emoji{display:none}
+.modal-mask{position:fixed;inset:0;background:rgba(8,10,14,.78);backdrop-filter:blur(8px);z-index:200;display:none;align-items:center;justify-content:center;padding:20px}
+.modal-mask.show{display:flex;animation:fadeIn .25s var(--ease-out-quart)}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.modal{width:min(460px,100%);background:linear-gradient(160deg,#1a1f29,#14181f);border:1px solid var(--line-strong);border-radius:22px;box-shadow:0 30px 60px -20px rgba(0,0,0,.7);overflow:hidden}
+.modal-head{padding:22px 24px 0;display:flex;align-items:center;justify-content:space-between}
+.modal-head h3{font-size:18px;font-weight:750;letter-spacing:.5px}
+.modal-close{width:32px;height:32px;border-radius:10px;border:none;background:transparent;color:var(--text-3);cursor:pointer;display:grid;place-items:center;transition:all var(--t-fast)}
+.modal-close:hover{color:var(--text-1);background:rgba(255,255,255,.05)}
+.modal-close svg{width:16px;height:16px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round}
+.modal-body{padding:18px 24px 20px;display:flex;flex-direction:column;gap:14px}
+.modal-avatar{display:flex;flex-direction:column;align-items:center;gap:12px;padding:6px 0 12px;border-bottom:1px dashed var(--line-strong)}
+.modal-preview{width:96px;height:96px;border-radius:50%;background:linear-gradient(135deg,#ffd9a8,#f0a05a 60%,#e8734f);display:grid;place-items:center;font-size:46px;position:relative;overflow:hidden;box-shadow:0 14px 30px -10px rgba(240,160,90,.45)}
+.modal-preview .ava-emoji{line-height:1}
+.modal-avatar .actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.modal-avatar .actions button{font-size:12px;padding:7px 13px;border-radius:9px;border:1px solid var(--line-strong);background:rgba(255,255,255,.04);color:var(--text-2);cursor:pointer;font-family:inherit;transition:all var(--t-fast);display:inline-flex;align-items:center;gap:6px}
+.modal-avatar .actions button:hover{color:var(--text-1);background:rgba(255,255,255,.07)}
+.modal-avatar .actions button svg{width:13px;height:13px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.modal-avatar .actions .reset{color:var(--err);border-color:rgba(239,122,114,.25)}
+.modal-avatar .actions .reset:hover{background:rgba(239,122,114,.1);color:var(--err)}
+.modal-field label{display:block;font-size:13px;color:var(--text-2);margin-bottom:6px;letter-spacing:.5px}
+.modal-field input{width:100%;padding:11px 14px;border-radius:12px;border:1px solid var(--line-strong);background:rgba(255,255,255,.035);color:var(--text-1);font-size:14px;font-family:inherit;outline:none;transition:border-color var(--t-fast),box-shadow var(--t-fast);letter-spacing:.5px}
+.modal-field input:focus{border-color:rgba(240,178,92,.65);box-shadow:0 0 0 4px rgba(240,178,92,.12)}
+.modal-foot{display:flex;gap:10px;padding:0 24px 22px}
+.modal-foot .btn{flex:1;justify-content:center}
 .profile h3{font-size:21px;font-weight:750;letter-spacing:1px}
 .profile .tag{display:inline-flex;align-items:center;gap:6px;margin-top:var(--s2);padding:5px 13px;border-radius:var(--r-full);background:rgba(92,200,178,.1);border:1px solid rgba(92,200,178,.25);color:var(--teal);font-size:12px;letter-spacing:.5px}
 .profile .tag svg{width:12px;height:12px;stroke:currentColor;stroke-width:2;fill:none}
@@ -208,7 +235,7 @@ body{font-family:var(--font-display);background:var(--bg-0);color:var(--text-1);
       <span><span class="brand-name">晨光<em>自律台</em></span><span class="brand-sub">SELF-DISCIPLINE OS</span></span>
     </a>
     <div class="topbar-right">
-      <div class="chip-user" id="chipUser"><span class="ava" id="chipUserAva">🍊</span><span class="name" id="chipUserName">用户</span></div>
+      <div class="chip-user" id="chipUser"><span class="ava" id="chipUserAva"><img alt="" id="chipUserAvaImg"><span class="ava-emoji">🍊</span></span><span class="name" id="chipUserName">用户</span></div>
       <button class="btn btn-ghost btn-sm" id="logoutBtn" type="button" title="退出登录">
         <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
         退出
@@ -235,7 +262,7 @@ body{font-family:var(--font-display);background:var(--bg-0);color:var(--text-1);
     </section>
     <aside class="card col-5 reveal" style="--d:.12s" aria-label="我的资料">
       <div class="profile">
-        <div class="profile-avatar" id="profileAva">🍊</div>
+        <div class="profile-avatar" id="profileAva"><img alt="" id="profileAvaImg"><span class="ava-emoji">🍊</span></div>
         <h3 id="profileName">自律者</h3>
         <span class="tag"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg> 连续自律 <b id="streakNum">0</b> 天</span>
         <p class="motto" id="profileMotto">每天进步一点点<br>自律让我自由</p>
@@ -331,6 +358,37 @@ body{font-family:var(--font-display);background:var(--bg-0);color:var(--text-1);
   </main>
   <footer class="footer reveal" style="--d:.6s">晨光自律台 · <b>每天进步一点点，自律让我自由</b></footer>
 </div>
+<div class="modal-mask" id="editModal" role="dialog" aria-modal="true" aria-labelledby="editTitle">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="editTitle">编辑个人资料</h3>
+      <button class="modal-close" id="modalClose" type="button" aria-label="关闭"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6l-6 6-6 6"/></svg></button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-avatar">
+        <div class="modal-preview" id="modalPreview"><img alt="" id="modalPreviewImg"><span class="ava-emoji">🍊</span></div>
+        <div class="actions">
+          <button type="button" id="btnPickImg"><svg viewBox="0 0 24 24"><path d="M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2z"/><circle cx="8.5" cy="9" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>从本地上传</button>
+          <button type="button" id="btnUseEmoji"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>用 emoji</button>
+          <button type="button" id="btnResetAva" class="reset"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>重置</button>
+          <input type="file" id="fileInput" accept="image/*" style="display:none">
+        </div>
+      </div>
+      <div class="modal-field">
+        <label for="editNick">昵称</label>
+        <input id="editNick" maxlength="12" placeholder="昵称">
+      </div>
+      <div class="modal-field">
+        <label for="editMotto">签名（一句话）</label>
+        <input id="editMotto" maxlength="40" placeholder="签名">
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" type="button" id="modalCancel">取消</button>
+      <button class="btn btn-primary" type="button" id="modalSave">保 存</button>
+    </div>
+  </div>
+</div>
 <script>
 (function(){
   "use strict";
@@ -376,7 +434,20 @@ body{font-family:var(--font-display);background:var(--bg-0);color:var(--text-1);
   function save(){ Store.saveData(me, data); }
 
   /* ========== 顶栏用户信息 ========== */
-  document.getElementById('chipUserAva').textContent = data.profile.avatar || '🍊';
+  function applyAvatar(el, profile){
+    if(!el) return;
+    var img = el.querySelector('img');
+    var em = el.querySelector('.ava-emoji');
+    if(profile.avatarType === 'image' && profile.avatarData){
+      el.classList.add('has-image');
+      if(img) img.src = profile.avatarData;
+    } else {
+      el.classList.remove('has-image');
+      if(img) img.src = '';
+      if(em) em.textContent = profile.avatar || '🍊';
+    }
+  }
+  applyAvatar(document.getElementById('chipUserAva'), data.profile);
   document.getElementById('chipUserName').textContent = data.profile.nickname || me;
   document.getElementById('logoutBtn').addEventListener('click', function(){
     if(confirm('确定要退出登录吗？当前账号数据已自动保存。')){
@@ -421,7 +492,7 @@ body{font-family:var(--font-display);background:var(--bg-0);color:var(--text-1);
   /* ========== 资料卡渲染 ========== */
   function renderProfile(){
     var p = data.profile;
-    document.getElementById('profileAva').textContent = p.avatar || '🍊';
+    applyAvatar(document.getElementById('profileAva'), p);
     document.getElementById('profileName').textContent = p.nickname || me;
     document.getElementById('profileMotto').innerHTML = (p.motto||'每天进步一点点，自律让我自由').split('\n').join('<br>');
     document.getElementById('streakNum').textContent = p.streak || 0;
@@ -616,19 +687,92 @@ body{font-family:var(--font-display);background:var(--bg-0);color:var(--text-1);
     document.getElementById('growthBooks').textContent = Math.round((g.pages||0)/40);
   }
 
-  /* ========== 编辑资料 ========== */
-  document.getElementById('editProfileBtn').addEventListener('click', function(){
-    var nick = prompt('昵称：', data.profile.nickname);
-    if(nick){ data.profile.nickname = nick.trim().slice(0,12); }
-    var motto = prompt('签名（一句话）：', data.profile.motto);
-    if(motto){ data.profile.motto = motto.trim().slice(0,40); }
-    var ava = prompt('头像 emoji：', data.profile.avatar||'🍊');
-    if(ava){ data.profile.avatar = ava.slice(0,4); }
+  /* ========== 编辑资料（模态 + 本地图片头像） ========== */
+  var modal = document.getElementById('editModal');
+  var editNick = document.getElementById('editNick');
+  var editMotto = document.getElementById('editMotto');
+  var modalPreview = document.getElementById('modalPreview');
+  var fileInput = document.getElementById('fileInput');
+  function openModal(){
+    editNick.value = data.profile.nickname || me;
+    editMotto.value = data.profile.motto || '';
+    applyAvatar(modalPreview, data.profile);
+    modal.classList.add('show');
+    setTimeout(function(){ editNick.focus(); editNick.select(); }, 200);
+  }
+  function closeModal(){ modal.classList.remove('show'); fileInput.value = ''; }
+  document.getElementById('editProfileBtn').addEventListener('click', openModal);
+  document.getElementById('modalClose').addEventListener('click', closeModal);
+  document.getElementById('modalCancel').addEventListener('click', closeModal);
+  modal.addEventListener('click', function(e){ if(e.target === modal) closeModal(); });
+  document.addEventListener('keydown', function(e){ if(e.key === 'Escape' && modal.classList.contains('show')) closeModal(); });
+
+  /* 本地选图 → 压缩到 200x200 JPEG */
+  document.getElementById('btnPickImg').addEventListener('click', function(){ fileInput.click(); });
+  fileInput.addEventListener('change', function(e){
+    var f = e.target.files && e.target.files[0];
+    if(!f) return;
+    if(!/^image\//.test(f.type)){ alert('请选择图片文件（支持 JPG/PNG/WebP/GIF）'); fileInput.value=''; return; }
+    if(f.size > 6*1024*1024){ alert('图片过大（>6MB），请选择小一点的'); fileInput.value=''; return; }
+    var reader = new FileReader();
+    reader.onload = function(ev){
+      var img = new Image();
+      img.onload = function(){
+        try{
+          var size = 240;
+          var canvas = document.createElement('canvas');
+          canvas.width = canvas.height = size;
+          var ctx = canvas.getContext('2d');
+          var sw = img.width, sh = img.height;
+          var ratio = Math.max(size/sw, size/sh); /* cover */
+          var dw = sw*ratio, dh = sh*ratio;
+          ctx.drawImage(img, (size-dw)/2, (size-dh)/2, dw, dh);
+          var dataURL = canvas.toDataURL('image/jpeg', 0.82);
+          data.profile.avatarType = 'image';
+          data.profile.avatarData = dataURL;
+          data.profile.avatar = '';
+          applyAvatar(modalPreview, data.profile);
+        }catch(err){ alert('图片处理失败：' + err.message); }
+      };
+      img.onerror = function(){ alert('图片读取失败，请换一张'); };
+      img.src = ev.target.result;
+    };
+    reader.onerror = function(){ alert('文件读取失败'); };
+    reader.readAsDataURL(f);
+    fileInput.value = '';
+  });
+
+  /* 用 emoji */
+  document.getElementById('btnUseEmoji').addEventListener('click', function(){
+    var def = (data.profile.avatar && data.profile.avatarType !== 'image') ? data.profile.avatar : '🍊';
+    var em = prompt('输入一个 emoji 作为头像：', def);
+    if(!em) return;
+    data.profile.avatarType = 'emoji';
+    data.profile.avatar = em.slice(0,4);
+    data.profile.avatarData = '';
+    applyAvatar(modalPreview, data.profile);
+  });
+
+  /* 重置默认 */
+  document.getElementById('btnResetAva').addEventListener('click', function(){
+    if(!confirm('重置为默认头像 🍊？')) return;
+    data.profile.avatarType = 'emoji';
+    data.profile.avatar = '🍊';
+    data.profile.avatarData = '';
+    applyAvatar(modalPreview, data.profile);
+  });
+
+  /* 保存 */
+  document.getElementById('modalSave').addEventListener('click', function(){
+    var n = editNick.value.trim();
+    var m = editMotto.value.trim();
+    if(n) data.profile.nickname = n.slice(0,12);
+    if(m) data.profile.motto = m.slice(0,40);
     save();
     renderProfile();
-    /* 顶栏同步 */
-    document.getElementById('chipUserAva').textContent = data.profile.avatar;
+    applyAvatar(document.getElementById('chipUserAva'), data.profile);
     document.getElementById('chipUserName').textContent = data.profile.nickname;
+    closeModal();
   });
 
   /* ========== 入场动效 ========== */
