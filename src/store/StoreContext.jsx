@@ -1,13 +1,16 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { initialData } from '../data/initialData'
 import { uid } from '../lib/format'
 
-const STORAGE_KEY = 'student-workbench-v1'
 const ACCOUNTS_KEY = 'student-workbench-accounts'
+const SESSION_KEY = 'student-workbench-session'    // {isLoggedIn, currentUser}
+const DATA_KEY_PREFIX = 'student-workbench-data-'  // per-user: student-workbench-data-{username}
+const SETTINGS_GLOBAL_KEY = 'student-workbench-settings' // global settings (bg, etc)
+const EXPORT_VERSION = 1
 const StoreContext = createContext(null)
 
-/* ---- Account storage (separate from app data) ---- */
+/* ---- Account storage ---- */
 function loadAccounts() {
   try {
     const raw = localStorage.getItem(ACCOUNTS_KEY)
@@ -20,7 +23,56 @@ function saveAccounts(accounts) {
   try { localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts)) } catch (e) { /* ignore */ }
 }
 
-/* Hash password using SHA-256 (same as AuthModal) */
+/* ---- Session (login state only, no user data) ---- */
+function loadSession() {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY)
+    if (raw) return JSON.parse(raw)
+  } catch (e) { /* ignore */ }
+  return { isLoggedIn: false, currentUser: '' }
+}
+
+function saveSession(session) {
+  try { localStorage.setItem(SESSION_KEY, JSON.stringify(session)) } catch (e) { /* ignore */ }
+}
+
+/* ---- Per-user data loader/saver ---- */
+function loadUserData(username) {
+  const key = DATA_KEY_PREFIX + username
+  try {
+    const raw = localStorage.getItem(key)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (parsed && typeof parsed === 'object') return parsed
+    }
+  } catch (e) { /* ignore */ }
+  // Fresh user data from template
+  return {
+    ...initialData,
+    isLoggedIn: true,
+    currentUser: username,
+  }
+}
+
+function saveUserData(username, userData) {
+  const key = DATA_KEY_PREFIX + username
+  try { localStorage.setItem(key, JSON.stringify(userData)) } catch (e) { /* ignore */ }
+}
+
+/* ---- Global settings (shared across users, e.g. background) ---- */
+function loadGlobalSettings() {
+  try {
+    const raw = localStorage.getItem(SETTINGS_GLOBAL_KEY)
+    if (raw) return JSON.parse(raw)
+  } catch (e) { /* ignore */ }
+  return initialData.settings || {}
+}
+
+function saveGlobalSettings(settings) {
+  try { localStorage.setItem(SETTINGS_GLOBAL_KEY, JSON.stringify(settings)) } catch (e) { /* ignore */ }
+}
+
+/* ---- Password hash ---- */
 async function hashPassword(password) {
   const encoder = new TextEncoder()
   const data = encoder.encode(password + '_swb_salt_v1')
@@ -28,34 +80,134 @@ async function hashPassword(password) {
   return Array.from(new Uint8Array(hashBuffer)).map((b) => b.toString(16).padStart(2, '0')).join('')
 }
 
-/* ---- App data loader ---- */
-function loadData() {
+/* ---- Migration: convert old single-data format to per-user ---- */
+function migrateOldData() {
+  const OLD_KEY = 'student-workbench-v1'
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) {
-      const parsed = JSON.parse(raw)
-      if (parsed && typeof parsed === 'object') return parsed
+    const raw = localStorage.getItem(OLD_KEY)
+    if (!raw) return false
+    const oldData = JSON.parse(raw)
+    if (!oldData || !oldData.currentUser) return false
+
+    const username = oldData.currentUser
+    // Check if already migrated
+    if (localStorage.getItem(DATA_KEY_PREFIX + username)) return false
+
+    // Save old data under the user's key (strip session fields)
+    const { isLoggedIn, currentUser, ...userData } = oldData
+    saveUserData(username, userData)
+
+    // Save settings globally if present
+    if (oldData.settings) {
+      saveGlobalSettings(oldData.settings)
     }
+
+    // Remove old key to prevent re-migration
+    localStorage.removeItem(OLD_KEY)
+    return true
   } catch (e) {
-    /* ignore corrupt storage */
+    return false
   }
-  return initialData
+}
+
+/* ---- Export / Import ---- */
+export function exportAllData() {
+  const accounts = loadAccounts()
+  const usersData = {}
+  const globalSettings = loadGlobalSettings()
+
+  // Collect each user's data
+  for (const username of Object.keys(accounts)) {
+    try {
+      const raw = localStorage.getItem(DATA_KEY_PREFIX + username)
+      if (raw) usersData[username] = JSON.parse(raw)
+    } catch (e) { /* skip corrupt */ }
+  }
+
+  return {
+    version: EXPORT_VERSION,
+    exportedAt: new Date().toISOString(),
+    accounts,
+    usersData,
+    globalSettings,
+  }
+}
+
+export function importAllData(jsonObj, mode = 'merge') {
+  // mode: 'merge' = merge with existing, 'overwrite' = replace everything
+  if (!jsonObj || jsonObj.version === undefined) throw new Error('无效的备份文件格式')
+
+  if (mode === 'overwrite') {
+    // Clear existing
+    const existingAccounts = loadAccounts()
+    for (const u of Object.keys(existingAccounts)) {
+      localStorage.removeItem(DATA_KEY_PREFIX + u)
+    }
+  }
+
+  // Import accounts (merge or overwrite)
+  const existingAccounts = mode === 'overwrite' ? {} : loadAccounts()
+  const mergedAccounts = { ...existingAccounts, ...(jsonObj.accounts || {}) }
+  saveAccounts(mergedAccounts)
+
+  // Import per-user data
+  for (const [username, userData] of Object.entries(jsonObj.usersData || {})) {
+    if (typeof userData === 'object' && userData !== null) {
+      saveUserData(username, userData)
+    }
+  }
+
+  // Import global settings
+  if (jsonObj.globalSettings) {
+    saveGlobalSettings({ ...loadGlobalSettings(), ...jsonObj.globalSettings })
+  }
+
+  return Object.keys(jsonObj.accounts || {}).length
 }
 
 export function StoreProvider({ children }) {
-  const [data, setData] = useState(loadData)
+  const [data, setData] = useState(() => {
+    // Try migration first
+    migrateOldData()
+
+    // Load session
+    const session = loadSession()
+    if (session.isLoggedIn && session.currentUser) {
+      // Load this specific user's data
+      const userData = loadUserData(session.currentUser)
+      return {
+        ...userData,
+        isLoggedIn: true,
+        currentUser: session.currentUser,
+        settings: loadGlobalSettings(),
+      }
+    }
+    // Not logged in — show initial data (will be replaced on login)
+    return { ...initialData, settings: loadGlobalSettings() }
+  })
+
   const [activePage, setActivePage] = useState('home')
   const [toasts, setToasts] = useState([])
   const [profileOpen, setProfileOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
 
-  // Persist on every change
+  // Track current user for saving
+  const currentUserRef = useRef(data.currentUser)
+
+  // Persist user data on every change (only when logged in)
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
-    } catch (e) {
-      /* storage may be full / disabled */
+    currentUserRef.current = data.currentUser
+    // Always persist global settings
+    if (data.settings) {
+      saveGlobalSettings(data.settings)
     }
+    // Persist per-user data only when logged in
+    if (data.isLoggedIn && data.currentUser) {
+      const { isLoggedIn, currentUser, ...userData } = data
+      saveUserData(currentUser, { ...userData, isLoggedIn: true, currentUser })
+    }
+    // Update session
+    saveSession({ isLoggedIn: data.isLoggedIn, currentUser: data.currentUser || '' })
   }, [data])
 
   const pushToast = useCallback((message, type = 'success') => {
@@ -190,14 +342,14 @@ export function StoreProvider({ children }) {
   }, [])
 
   const resetAll = useCallback(() => {
-    setData(initialData)
+    setData({ ...initialData, settings: loadGlobalSettings() })
     pushToast('已恢复示例数据')
   }, [pushToast])
 
-  /* ---------------- Auth: Register (username + password) ---------------- */
+  /* ---------------- Auth: Register ---------------- */
   const registerUser = useCallback(async (username, password, profile) => {
     const accounts = loadAccounts()
-    if (accounts[username]) return false // username taken
+    if (accounts[username]) return false
 
     const hashedPassword = await hashPassword(password)
     accounts[username] = {
@@ -214,17 +366,16 @@ export function StoreProvider({ children }) {
     }
     saveAccounts(accounts)
 
-    // Auto-login after registration
-    setData((d) => ({
-      ...d,
-      isLoggedIn: true,
-      currentUser: username,
-      user: { ...accounts[username].profile },
-    }))
+    // Initialize fresh data for new user & switch to it
+    const freshData = loadUserData(username)
+    setData({
+      ...freshData,
+      settings: loadGlobalSettings(),
+    })
     return true
   }, [])
 
-  /* ---------------- Auth: Login (username + password) ---------------- */
+  /* ---------------- Auth: Login ---------------- */
   const loginUserWithPassword = useCallback(async (username, password) => {
     const accounts = loadAccounts()
     const account = accounts[username]
@@ -233,19 +384,19 @@ export function StoreProvider({ children }) {
     const hashedInput = await hashPassword(password)
     if (hashedInput !== account.passwordHash) return false
 
-    // Login success — load this user's profile into app state
-    setData((d) => ({
-      ...d,
+    // Load THIS user's data (isolated from other users)
+    const userData = loadUserData(username)
+    setData({
+      ...userData,
       isLoggedIn: true,
       currentUser: username,
-      user: { ...account.profile },
-    }))
+      settings: loadGlobalSettings(),
+    })
     return true
   }, [])
 
-  /* ---------------- User Profile (post-login editing) ---------------- */
+  /* ---------------- User Profile editing ---------------- */
   const loginUser = useCallback((profile) => {
-    // Legacy: direct profile set (used by old login flow, kept for compat)
     setData((d) => ({ ...d, isLoggedIn: true, user: { ...d.user, ...profile } }))
     pushToast('欢迎回来，开始今日成长 🎉')
   }, [pushToast])
@@ -253,7 +404,7 @@ export function StoreProvider({ children }) {
   const updateUser = useCallback((patch) => {
     setData((d) => {
       const newUser = { ...d.user, ...patch }
-      // Also sync back to account storage if logged in via username
+      // Sync back to account storage
       if (d.currentUser) {
         const accounts = loadAccounts()
         if (accounts[d.currentUser]) {
@@ -267,14 +418,18 @@ export function StoreProvider({ children }) {
   }, [pushToast])
 
   const logoutUser = useCallback(() => {
-    setData((d) => ({ ...d, isLoggedIn: false, currentUser: '' }))
+    setData((d) => ({
+      ...initialData,
+      settings: d.settings || loadGlobalSettings(),
+      isLoggedIn: false,
+      currentUser: '',
+    }))
     setProfileOpen(false)
     pushToast('已退出登录')
   }, [pushToast])
 
   const openProfile = useCallback(() => setProfileOpen(true), [])
   const closeProfile = useCallback(() => setProfileOpen(false), [])
-
   const openSettings = useCallback(() => setSettingsOpen(true), [])
   const closeSettings = useCallback(() => setSettingsOpen(false), [])
 
@@ -318,6 +473,9 @@ export function StoreProvider({ children }) {
     // weekly
     addWeekly, updateWeekly, deleteWeekly, toggleWeekly,
     resetAll,
+    // export/import
+    exportAllData,
+    importAllData,
   }
 
   return (

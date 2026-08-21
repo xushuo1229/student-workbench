@@ -6,8 +6,10 @@ const fs = require('fs')
 const esbuild = require('esbuild')
 const { JSDOM } = require('jsdom')
 
-const KEY = 'student-workbench-v1'
-const ACC_KEY = 'student-workbench-accounts'
+const KEY = 'student-workbench-v1'           // legacy key (migration source)
+const ACC_KEY = 'student-workbench-accounts'   // accounts registry
+const SESSION_KEY = 'student-workbench-session' // login session
+const DATA_PREFIX = 'student-workbench-data-'   // per-user data prefix
 let passed = 0
 const failures = []
 
@@ -82,8 +84,33 @@ async function main() {
     Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set.call(el, value)
     el.dispatchEvent(new window.Event('change', { bubbles: true }))
   }
-  const inputByPlaceholder = (sub) => [...document.querySelectorAll('input,textarea')].find((e) => (e.placeholder || '').includes(sub))
-  const readStore = () => JSON.parse(localStorage.getItem(KEY) || '{}')
+const inputByPlaceholder = (sub) => [...document.querySelectorAll('input,textarea')].find((e) => (e.placeholder || '').includes(sub))
+
+/* Read current store data — tries new per-user format first, falls back to legacy */
+function readStore() {
+  // Try new per-user format
+  try {
+    const session = JSON.parse(localStorage.getItem(SESSION_KEY) || '{}')
+    // Session is source of truth for login state
+    const isLoggedIn = session.isLoggedIn === true
+    const currentUser = session.currentUser || ''
+    if (currentUser && isLoggedIn) {
+      const raw = localStorage.getItem(DATA_PREFIX + currentUser)
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        return { ...parsed, isLoggedIn, currentUser }
+      }
+    }
+    // Not logged in or no user data — return session state + empty data
+    return { isLoggedIn, currentUser }
+  } catch (e) { /* fall through */ }
+  // Fallback to legacy format
+  try {
+    const raw = localStorage.getItem(KEY)
+    if (raw) return JSON.parse(raw)
+  } catch (e) { /* ignore */ }
+  return {}
+}
 
   // 3) Render
   require(outfile)
@@ -265,15 +292,20 @@ async function main() {
 
   /* ==================== PERSISTENCE ==================== */
   console.log('\n[8] 刷新持久化：用已保存数据重新挂载')
-  const saved = localStorage.getItem(KEY)
-  const savedAcc = localStorage.getItem(ACC_KEY)
+  // Copy ALL storage keys for persistence test
+  const savedKeys = {}
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i)
+    savedKeys[k] = localStorage.getItem(k)
+  }
   const dom2 = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', { url: 'http://localhost/', pretendToBeVisual: true })
   global.window = dom2.window
   global.document = dom2.window.document
   global.navigator = dom2.window.navigator
   global.localStorage = dom2.window.localStorage
-  dom2.window.localStorage.setItem(KEY, saved)
-  dom2.window.localStorage.setItem(ACC_KEY, savedAcc)
+  for (const [k, v] of Object.entries(savedKeys)) {
+    dom2.window.localStorage.setItem(k, v)
+  }
   delete require.cache[require.resolve(outfile)]
   require(outfile)
   await tick(80)

@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { Settings, Upload, Image, RotateCcw, Palette, Type, Check } from 'lucide-react'
+import { Settings, Upload, Image, RotateCcw, Palette, Type, Check, Download, HardDriveUpload, Users, Smartphone } from 'lucide-react'
 import { useStore } from '../store/StoreContext'
 import { Modal, Button } from './ui/Modal'
 
@@ -99,11 +99,13 @@ const PRESET_BACKGROUNDS = [
 ]
 
 export function SettingsModal() {
-  const { data, updateSettings, settingsOpen, closeSettings, resetAll } = useStore()
+  const { data, updateSettings, settingsOpen, closeSettings, resetAll, exportAllData, importAllData, pushToast } = useStore()
   const fileInputRef = useRef(null)
+  const importInputRef = useRef(null)
   const [uploading, setUploading] = useState(false)
-  const [uploadStep, setUploadStep] = useState('') // 'reading' | 'processing' | 'saving'
+  const [uploadStep, setUploadStep] = useState('')
   const [bgPreview, setBgPreview] = useState(data.settings?.backgroundImage || null)
+  const [importing, setImporting] = useState(false)
 
   const currentBg = data.settings?.backgroundImage || null
 
@@ -151,6 +153,50 @@ export function SettingsModal() {
   function handleRemoveCustomBg() {
     setBgPreview(null)
     updateSettings({ backgroundImage: null })
+  }
+
+  /* ---- Export all data ---- */
+  function handleExport() {
+    try {
+      const exportData = exportAllData()
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `工作台备份_${new Date().toISOString().slice(0, 10)}.json`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+
+      const userCount = Object.keys(exportData.accounts || {}).length
+      pushToast(`已导出 ${userCount} 个账号的数据 ✅`)
+    } catch (e) {
+      pushToast('导出失败，请重试')
+    }
+  }
+
+  /* ---- Import data from file ---- */
+  async function handleImportFile(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImporting(true)
+    try {
+      const text = await file.text()
+      const jsonObj = JSON.parse(text)
+      const mode = confirm('选择导入方式：\n\n「确定」= 合并导入（保留现有数据）\n「取消」= 覆盖导入（替换所有数据）')
+        ? 'merge'
+        : 'overwrite'
+      const count = importAllData(jsonObj, mode)
+      pushToast(`成功导入 ${count} 个账号的数据！页面将刷新…`)
+      // Reload page to apply imported data
+      setTimeout(() => window.location.reload(), 1500)
+    } catch (err) {
+      alert('导入失败：' + (err.message || '文件格式错误'))
+    } finally {
+      setImporting(false)
+      if (importInputRef.current) importInputRef.current.value = ''
+    }
   }
 
   /* Determine active preset ID */
@@ -296,21 +342,67 @@ export function SettingsModal() {
             <Settings size={17} className="text-brand-500" />
             数据管理
           </h3>
+
+          {/* Cross-device sync */}
+          <div className="mb-4 rounded-xl bg-blue-50/70 p-4">
+            <div className="mb-3 flex items-center gap-2 text-blue-700">
+              <Smartphone size={16} />
+              <span className="text-xs font-semibold">跨设备同步</span>
+            </div>
+            <p className="mb-3 text-[11px] leading-relaxed text-slate-500">
+              在电脑上导出数据文件，然后在手机（或其他设备）上导入，即可同步所有账号和数据。
+              每个用户的数据完全独立，互不干扰。
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {/* Export */}
+              <Button
+                variant="soft"
+                size="sm"
+                onClick={handleExport}
+                className="flex-1"
+              >
+                <Download size={14} />
+                导出数据
+              </Button>
+              {/* Import */}
+              <>
+                <input
+                  ref={importInputRef}
+                  type="file"
+                  accept=".json,application/json"
+                  onChange={handleImportFile}
+                  className="hidden"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={importing}
+                  onClick={() => importInputRef.current?.click()}
+                  className="flex-1"
+                >
+                  <HardDriveUpload size={14} />
+                  {importing ? '导入中…' : '导入数据'}
+                </Button>
+              </>
+            </div>
+          </div>
+
+          {/* Danger zone: reset */}
           <div className="rounded-xl bg-rose-50/60 p-4">
             <p className="mb-3 text-xs text-slate-500">
-              以下操作会影响你的数据，请谨慎操作。
+              以下操作会影响当前用户的数据，请谨慎操作。
             </p>
             <div className="flex gap-2">
               <Button
                 variant="danger"
                 size="sm"
                 onClick={() => {
-                  if (confirm('确定要清除所有数据并恢复到初始状态吗？此操作不可撤销。')) {
+                  if (confirm('确定要清除当前用户的所有数据并恢复到初始状态吗？此操作不可撤销。')) {
                     resetAll()
                   }
                 }}
               >
-                重置所有数据
+                重置我的数据
               </Button>
             </div>
           </div>
