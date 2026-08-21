@@ -76,7 +76,9 @@ export function AuthModal() {
         setError('用户名或密码错误')
       }
     } catch (e) {
-      setError('登录失败，请重试')
+      const msg = e.message || '登录失败'
+      // Long error messages get full display; short ones stay as-is
+      setError(msg)
     }
     setLoading(false)
   }

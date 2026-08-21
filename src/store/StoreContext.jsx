@@ -301,37 +301,50 @@ export function StoreProvider({ children }) {
           grade: profile.grade || '',
           motto: profile.motto || '',
         },
+        // Skip email redirect — we handle it client-side
+        emailRedirectTo: window.location.origin,
       },
     })
 
     if (error) {
-      // User might already exist — try logging in instead
-      if (error.message.includes('already registered') || error.status === 422) {
+      // User already exists in auth — try logging in
+      if (error.message?.includes('already registered') || error.status === 422) {
         return loginUserWithPassword(username, password)
       }
       throw new Error(error.message)
     }
 
+    // Supabase v2 returns user even when email confirmation is required.
+    // If session exists → auto-confirmed (or email confirm disabled). Use it.
+    // If no session but user exists → email confirm is blocking.
     if (data.user) {
-      userIdRef.current = data.user.id
-
-      // Set user info in our data
-      const freshData = {
-        ...initialData,
-        isLoggedIn: true,
-        currentUser: username,
-        user: {
-          name: profile.name || username,
-          avatar: profile.avatar || '🍊',
-          school: profile.school || '',
-          major: profile.major || '',
-          grade: profile.grade || '',
-          motto: profile.motto || '',
-        },
+      if (data.session) {
+        // Confirmed / auto-confirmed → full login
+        userIdRef.current = data.user.id
+        const freshData = {
+          ...initialData,
+          isLoggedIn: true,
+          currentUser: username,
+          user: {
+            name: profile.name || username,
+            avatar: profile.avatar || '🍊',
+            school: profile.school || '',
+            major: profile.major || '',
+            grade: profile.grade || '',
+            motto: profile.motto || '',
+          },
+        }
+        setData((d) => ({ ...freshData, settings: d.settings || loadLocalSettings() }))
+        return true
+      } else {
+        // User created but not confirmed — try immediate sign-in
+        // (works when "Confirm email" is turned OFF in Supabase settings)
+        try {
+          return await loginUserWithPassword(username, password)
+        } catch {
+          throw new Error('注册成功但需要邮箱验证。请在 Supabase 控制台关闭「Confirm email」设置，或直接用此账号登录。')
+        }
       }
-
-      setData((d) => ({ ...freshData, settings: d.settings || loadLocalSettings() }))
-      return true
     }
 
     return false
@@ -347,8 +360,9 @@ export function StoreProvider({ children }) {
     })
 
     if (error) {
-      if (error.message.includes('Invalid login')) {
-        return false // Wrong password or user doesn't exist
+      if (error.message?.includes('Invalid login') || error.message?.includes('Email not confirmed')) {
+        // More helpful message
+        throw new Error('账号不存在或密码错误。如果是首次使用云端版，请先点「注册」创建新账号。')
       }
       throw new Error(error.message)
     }
