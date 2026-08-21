@@ -10,11 +10,11 @@ export function Topbar({ onToggleSidebar }) {
   const sub = [data.user?.grade, data.user?.major].filter(Boolean).join(' · ') || '自律达人'
 
   return (
-    <header className="z-10 flex items-center gap-3 border-b border-white/60 bg-white/60 px-4 py-3 backdrop-blur-xl sm:gap-4 sm:px-6 lg:px-8">
+    <header className="z-10 flex items-center gap-3 border-b border-white/40 bg-white/40 px-4 py-3 backdrop-blur-2xl sm:gap-4 sm:px-6 lg:px-8">
       {/* Hamburger - mobile only */}
       <button
         onClick={onToggleSidebar}
-        className="flex shrink-0 items-center justify-center rounded-xl p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 lg:hidden"
+        className="flex shrink-0 items-center justify-center rounded-xl p-2 text-slate-500 transition hover:bg-white/60 hover:text-slate-700 lg:hidden"
         aria-label="打开菜单"
       >
         <Menu size={22} />
@@ -37,7 +37,7 @@ export function Topbar({ onToggleSidebar }) {
         </div>
 
         {/* Notification bell */}
-        <button className="relative shrink-0 rounded-2xl bg-white/80 p-2 text-slate-500 transition hover:bg-slate-100" aria-label="通知">
+        <button className="relative shrink-0 rounded-2xl bg-white/60 p-2 text-slate-500 transition hover:bg-white/80" aria-label="通知">
           <Bell size={18} />
           <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-brand-500" />
         </button>
@@ -45,7 +45,7 @@ export function Topbar({ onToggleSidebar }) {
         {/* Settings gear */}
         <button
           onClick={openSettings}
-          className="shrink-0 rounded-2xl bg-white/80 p-2 text-slate-500 transition hover:bg-slate-100"
+          className="shrink-0 rounded-2xl bg-white/60 p-2 text-slate-500 transition hover:bg-white/80"
           aria-label="设置"
         >
           <Settings size={18} />
@@ -54,7 +54,7 @@ export function Topbar({ onToggleSidebar }) {
         {/* Avatar / profile trigger */}
         <button
           onClick={openProfile}
-          className="flex items-center gap-2 rounded-2xl bg-white/80 py-1.5 pl-1.5 pr-2.5 transition hover:bg-slate-100 sm:pr-3"
+          className="flex items-center gap-2 rounded-2xl bg-white/60 py-1.5 pl-1.5 pr-2.5 transition hover:bg-white/80 sm:pr-3"
           aria-label="查看个人资料"
         >
           <Avatar value={data.user?.avatar} size={32} />

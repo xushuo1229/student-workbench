@@ -4,9 +4,10 @@ import { useStore } from '../store/StoreContext'
 import { Modal, Button } from './ui/Modal'
 
 /* Convert a local image file into a data URL for background use.
-   Ultra-fast: uses URL.createObjectURL (instant) + canvas.toBlob (async/non-blocking)
-   + small output size (960px max, JPEG 0.5). Phone photos process in ~100-200ms. */
-function fileToBgDataUrl(file, maxSize = 960) {
+   HD quality: 1920px max long edge, JPEG 0.85 quality.
+   Uses URL.createObjectURL (instant) + canvas.toBlob (async, non-blocking).
+   Typical output: 200-500KB for phone photos — looks sharp on any screen. */
+function fileToBgDataUrl(file, maxSize = 1920) {
   return new Promise((resolve, reject) => {
     if (!file) return reject(new Error('未选择文件'))
     if (!file.type || !file.type.startsWith('image/')) return reject(new Error('请选择图片文件'))
@@ -17,7 +18,7 @@ function fileToBgDataUrl(file, maxSize = 960) {
     const img = new window.Image()
     img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error('图片解析失败')) }
     img.onload = () => {
-      // Step 2: Downscale aggressively — 960px long edge is plenty for a bg
+      // Step 2: Downscale only if needed — 1920px long edge for crisp backgrounds
       const scale = Math.min(1, maxSize / Math.max(img.width || maxSize, img.height || maxSize))
       const w = Math.max(1, Math.round((img.width || maxSize) * scale))
       const h = Math.max(1, Math.round((img.height || maxSize) * scale))
@@ -26,6 +27,9 @@ function fileToBgDataUrl(file, maxSize = 960) {
       canvas.width = w
       canvas.height = h
       const ctx = canvas.getContext('2d')
+      // High-quality downscaling
+      ctx.imageSmoothingEnabled = true
+      ctx.imageSmoothingQuality = 'high'
       ctx.drawImage(img, 0, 0, w, h)
       // Done with image & object URL
       URL.revokeObjectURL(objectUrl)
@@ -41,7 +45,7 @@ function fileToBgDataUrl(file, maxSize = 960) {
           reader.readAsDataURL(blob)
         },
         'image/jpeg',
-        0.5, // Low quality OK for backgrounds; makes encoding much faster
+        0.85, // High quality for crisp, non-blurry backgrounds
       )
     }
     img.src = objectUrl

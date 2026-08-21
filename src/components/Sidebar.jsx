@@ -45,7 +45,9 @@ export function Sidebar({ open, onClose }) {
 
       <aside
         className={clsx(
-          'z-40 flex h-full w-64 shrink-0 flex-col gap-2 border-r border-white/60 bg-white/70 px-4 py-5 backdrop-blur-xl',
+          'z-40 flex h-full w-64 shrink-0 flex-col gap-2 border-r border-white/40 px-4 py-5',
+          // Glassmorphism: translucent so page background shines through
+          'bg-white/40 backdrop-blur-2xl',
           // Desktop: always visible
           'lg:relative lg:block',
           // Mobile: fixed drawer that slides in/out
@@ -68,7 +70,7 @@ export function Sidebar({ open, onClose }) {
           {onClose && (
             <button
               onClick={onClose}
-              className="rounded-xl p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 lg:hidden"
+              className="rounded-xl p-1.5 text-slate-400 transition hover:bg-white/60 hover:text-slate-600 lg:hidden"
               aria-label="关闭菜单"
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
@@ -87,8 +89,8 @@ export function Sidebar({ open, onClose }) {
                 className={clsx(
                   'group relative flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium transition',
                   active
-                    ? 'bg-brand-100 text-brand-700 shadow-sm shadow-brand-200'
-                    : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700',
+                    ? 'bg-white/70 text-brand-700 shadow-sm shadow-brand-200 backdrop-blur-md'
+                    : 'text-slate-600 hover:bg-white/50 hover:text-slate-800 hover:backdrop-blur-sm',
                 )}
               >
                 {active && (
@@ -104,14 +106,14 @@ export function Sidebar({ open, onClose }) {
         {/* Settings button */}
         <button
           onClick={openSettings}
-          className="group flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+          className="group flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium text-slate-500 transition hover:bg-white/50 hover:text-slate-700 hover:backdrop-blur-sm"
         >
           <Settings size={19} strokeWidth={2} />
           设置
         </button>
 
         {/* Soft promo card */}
-        <div className="mt-2 rounded-3xl bg-gradient-to-br from-brand-100 to-blue-100 p-4">
+        <div className="mt-2 rounded-3xl bg-white/60 p-4 shadow-sm backdrop-blur-md">
           <div className="flex items-center gap-2 text-brand-700">
             <Sparkles size={16} />
             <span className="text-xs font-semibold">每日小目标</span>
