@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-slate-50 text-slate-800 antialiased;
+  background-image:
+    radial-gradient(1200px 600px at 12% -8%, rgba(167, 139, 250, 0.16), transparent 60%),
+    radial-gradient(1000px 520px at 100% 0%, rgba(147, 197, 253, 0.14), transparent 55%),
+    radial-gradient(900px 500px at 60% 120%, rgba(253, 186, 116, 0.12), transparent 55%);
+  background-attachment: fixed;
+}
+
+/* Soft, minimal scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #d6cdfa transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #ddd6fe;
+  border-radius: 999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #c4b5fd;
+}
+
+/* Reusable glass surface */
+.glass {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+/* Form controls baseline */
+.input-base {
+  @apply w-full rounded-2xl border border-slate-200 bg-white/80 px-4 py-2.5 text-sm text-slate-700 outline-none transition;
+}
+.input-base:focus {
+  @apply border-brand-400 ring-4 ring-brand-100;
+}
+.label-base {
+  @apply mb-1.5 block text-sm font-medium text-slate-600;
+}
