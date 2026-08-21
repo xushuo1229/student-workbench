@@ -2,16 +2,31 @@ import { createContext, useContext, useState, useEffect, useCallback, useRef } f
 import { createPortal } from 'react-dom'
 import { initialData } from '../data/initialData'
 import { uid } from '../lib/format'
-import { supabase, USER_DATA_TABLE, USERS_TABLE } from '../lib/supabase'
+
+/* ---- Supabase (optional — graceful fallback if unavailable) ---- */
+let supabase = null
+let USER_DATA_TABLE = 'user_data'
+let USERS_TABLE = 'wb_users'
+try {
+  const sb = require('@supabase/supabase-js')
+  supabase = sb.createClient(
+    'https://gidbmdeawvxpfudcvoxfg.supabase.co',
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmVzIiwicm9sZSI6ImFub24iLCJleHAiOjE5NjM4MDczODZ9',
+  )
+} catch (e) {
+  /* Supabase not available — pure local mode */
+}
 
 /* ---- Local storage keys ---- */
 const LOCAL_SETTINGS_KEY = 'student-workbench-settings'
 const LOCAL_CACHE_PREFIX = 'student-workbench-cache-'
-const LOCAL_SESSION_KEY = 'student-workbench-session' // { userId, username }
+const LOCAL_SESSION_KEY = 'student-workbench-session' // { userId, username, mode: 'cloud' | 'local' }
+const LOCAL_ACCOUNTS_KEY = 'student-workbench-accounts' // legacy + fallback
+const LOCAL_DATA_KEY = 'student-workbench-v1' // legacy data key
 
 const StoreContext = createContext(null)
 
-/* ---- SHA-256 password hashing (client-side) ---- */
+/* ---- SHA-256 password hashing ---- */
 async function hashPassword(password) {
   const encoder = new TextEncoder()
   const bytes = encoder.encode(password)
@@ -47,7 +62,7 @@ function setLocalCache(userId, data) {
   try { localStorage.setItem(LOCAL_CACHE_PREFIX + userId, JSON.stringify(data)) } catch (e) { /* ignore */ }
 }
 
-/* ---- Session (login state) ---- */
+/* ---- Session ---- */
 function loadSession() {
   try {
     const raw = localStorage.getItem(LOCAL_SESSION_KEY)
@@ -56,42 +71,121 @@ function loadSession() {
   return null
 }
 
-function saveSession(userId, username) {
-  try { localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify({ userId, username })) } catch (e) { /* ignore */ }
+function saveSession(userId, username, mode = 'cloud') {
+  try { localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify({ userId, username, mode })) } catch (e) { /* ignore */ }
 }
 
 function clearSession() {
   try { localStorage.removeItem(LOCAL_SESSION_KEY) } catch (e) { /* ignore */ }
 }
 
-/* ---- Cloud: read user's app data from Supabase ---- */
-async function fetchCloudData(userId) {
-  const { data, error } = await supabase
-    .from(USER_DATA_TABLE)
-    .select('data')
-    .eq('user_id', userId)
-    .single()
-
-  if (error || !data) return null
-  return data.data
+/* ---- Legacy accounts (localStorage-based auth) ---- */
+function loadAccounts() {
+  try {
+    const raw = localStorage.getItem(LOCAL_ACCOUNTS_KEY)
+    if (raw) return JSON.parse(raw)
+  } catch (e) { /* ignore */ }
+  return {}
 }
 
-/* ---- Cloud: upsert user's app data to Supabase ---- */
+function saveAccounts(accounts) {
+  try { localStorage.setItem(LOCAL_ACCOUNTS_KEY, JSON.stringify(accounts)) } catch (e) { /* ignore */ }
+}
+
+/* ---- Legacy per-user data key ---- */
+function userDataKey(username) {
+  return `student-workbench-data-${username}`
+}
+
+function loadUserData(username) {
+  try {
+    const raw = localStorage.getItem(userDataKey(username))
+    if (raw) return JSON.parse(raw)
+  } catch (e) { /* ignore */ }
+  return null
+}
+
+function saveUserData(username, data) {
+  try { localStorage.setItem(userDataKey(username), JSON.stringify(data)) } catch (e) { /* ignore */ }
+}
+
+/* ---- Cloud helpers (safe to call even without Supabase) ---- */
+async function fetchCloudData(userId) {
+  if (!supabase) return null
+  try {
+    const { data, error } = await supabase
+      .from(USER_DATA_TABLE)
+      .select('data')
+      .eq('user_id', userId)
+      .single()
+    if (error || !data) return null
+    return data.data
+  } catch (e) {
+    return null // Network error or table doesn't exist → fallback
+  }
+}
+
 async function pushCloudData(userId, appData) {
-  const { isLoggedIn, currentUser, settings, ...cleanData } = appData
+  if (!supabase) return false
+  try {
+    const { isLoggedIn, currentUser, settings, ...cleanData } = appData
+    const { error } = await supabase
+      .from(USER_DATA_TABLE)
+      .upsert(
+        { user_id: userId, data: cleanData, updated_at: new Date().toISOString() },
+        { onConflict: 'user_id' },
+      )
+    return !error
+  } catch (e) {
+    return false // Silently fail — local still works
+  }
+}
 
-  const { error } = await supabase
-    .from(USER_DATA_TABLE)
-    .upsert(
-      {
-        user_id: userId,
-        data: cleanData,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'user_id' },
-    )
+async function cloudRegisterUser(username, passwordHash, profile) {
+  if (!supabase) return null
 
-  return !error
+  // Check existing
+  const { data: existing } = await supabase
+    .from(USERS_TABLE)
+    .select('id')
+    .eq('username', username)
+    .maybeSingle()
+  if (existing) throw new Error('该用户名已被注册')
+
+  // Insert
+  const { data: newUser, error } = await supabase
+    .from(USERS_TABLE)
+    .insert({
+      username,
+      password_hash: passwordHash,
+      display_name: profile.name || username,
+      avatar: profile.avatar || '🍊',
+      school: profile.school || '',
+      major: profile.major || '',
+      grade: profile.grade || '',
+      motto: profile.motto || '',
+    })
+    .select()
+    .single()
+
+  if (error) throw new Error(error.message)
+  return newUser
+}
+
+async function cloudLoginUser(username, passwordHash) {
+  if (!supabase) return null
+
+  const { data: userRow, error } = await supabase
+    .from(USERS_TABLE)
+    .select('*')
+    .eq('username', username)
+    .maybeSingle()
+
+  if (error) throw new Error('登录失败，请检查网络')
+  if (!userRow) return null // User not found in cloud
+  if (userRow.password_hash !== passwordHash) throw new Error('密码错误')
+
+  return userRow
 }
 
 export function StoreProvider({ children }) {
@@ -104,23 +198,32 @@ export function StoreProvider({ children }) {
   const [profileOpen, setProfileOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
 
-  // Track current user ID for cloud operations
   const userIdRef = useRef(null)
   const cloudSyncTimer = useRef(null)
+  const isCloudMode = useRef(false)
 
-  // ---- On mount: restore session from local storage ----
+  // ---- On mount: restore session ----
   useEffect(() => {
     const session = loadSession()
-    if (session?.userId) {
+    if (session?.userId && session?.username) {
       userIdRef.current = session.userId
-      loadUserDataFromSource(session.userId, session.username)
+      isCloudMode.current = session.mode === 'cloud'
+      loadUserDataFromSource(session.userId, session.username, session.mode)
     }
   }, [])
 
-  // ---- Load user data: cloud first, local cache fallback ----
-  async function loadUserDataFromSource(userId, username) {
-    let userData = await fetchCloudData(userId)
-    if (!userData) userData = getLocalCache(userId)
+  // ---- Load user data: cloud first, local fallback ----
+  async function loadUserDataFromSource(userId, username, mode) {
+    let userData = null
+
+    if (mode === 'cloud') {
+      userData = await fetchCloudData(userId)
+    }
+
+    // Fallback: local cache / legacy data
+    if (!userData) {
+      userData = getLocalCache(userId) || loadUserData(username)
+    }
 
     if (userData) {
       setData((d) => ({
@@ -138,13 +241,22 @@ export function StoreProvider({ children }) {
   // ---- Auto-sync to cloud on data changes (debounced) ----
   useEffect(() => {
     if (!userIdRef.current || !data.isLoggedIn) return
-
     if (cloudSyncTimer.current) clearTimeout(cloudSyncTimer.current)
+
     cloudSyncTimer.current = setTimeout(async () => {
       const userId = userIdRef.current
       if (!userId) return
+
+      // Always save locally
       setLocalCache(userId, data)
-      await pushCloudData(userId, data)
+      if (!isCloudMode.current && data.currentUser) {
+        saveUserData(data.currentUser, data)
+      }
+
+      // Try cloud sync (silent fail)
+      if (isCloudMode.current) {
+        await pushCloudData(userId, data)
+      }
     }, 800)
 
     if (data.settings) saveLocalSettings(data.settings)
@@ -284,44 +396,58 @@ export function StoreProvider({ children }) {
     pushToast('已恢复示例数据')
   }, [pushToast])
 
-  /* ==================== AUTH: Register (custom users table) ==================== */
+  /* ==================== AUTH: Register (hybrid: cloud first → local fallback) ==================== */
   const registerUser = useCallback(async (username, password, profile) => {
     const passwordHash = await hashPassword(password)
 
-    // Check if username already exists
-    const { data: existing } = await supabase
-      .from(USERS_TABLE)
-      .select('id')
-      .eq('username', username)
-      .maybeSingle()
+    // Strategy 1: Try Supabase cloud registration
+    if (supabase) {
+      try {
+        const newUser = await cloudRegisterUser(username, passwordHash, profile)
+        if (newUser) {
+          // Cloud success!
+          userIdRef.current = newUser.id
+          isCloudMode.current = true
+          saveSession(newUser.id, username, 'cloud')
 
-    if (existing) {
+          const freshData = {
+            ...initialData,
+            isLoggedIn: true,
+            currentUser: username,
+            user: {
+              name: profile.name || username,
+              avatar: profile.avatar || '🍊',
+              school: profile.school || '',
+              major: profile.major || '',
+              grade: profile.grade || '',
+              motto: profile.motto || '',
+            },
+          }
+          setData((d) => ({ ...freshData, settings: d.settings || loadLocalSettings() }))
+          return true
+        }
+      } catch (e) {
+        // Cloud failed (table missing, network error, etc.) → fall through to local
+        console.warn('Cloud register failed, falling back to local:', e.message)
+      }
+    }
+
+    // Strategy 2: Fallback to localStorage accounts
+    const accounts = loadAccounts()
+    if (accounts[username]) {
       throw new Error('该用户名已被注册，请换一个或直接登录')
     }
 
-    // Insert new user
-    const { data: newUser, error } = await supabase
-      .from(USERS_TABLE)
-      .insert({
-        username,
-        password_hash: passwordHash,
-        display_name: profile.name || username,
-        avatar: profile.avatar || '🍊',
-        school: profile.school || '',
-        major: profile.major || '',
-        grade: profile.grade || '',
-        motto: profile.motto || '',
-      })
-      .select()
-      .single()
+    // Save account
+    accounts[username] = { passwordHash, ...profile }
+    saveAccounts(accounts)
 
-    if (error) throw new Error(error.message)
+    // Generate a stable local ID for this user
+    const localUserId = `local_${username}_${Date.now()}`
+    userIdRef.current = localUserId
+    isCloudMode.current = false
+    saveSession(localUserId, username, 'local')
 
-    // Save session locally
-    userIdRef.current = newUser.id
-    saveSession(newUser.id, username)
-
-    // Set state
     const freshData = {
       ...initialData,
       isLoggedIn: true,
@@ -339,48 +465,82 @@ export function StoreProvider({ children }) {
     return true
   }, [pushToast])
 
-  /* ==================== AUTH: Login (custom users table) ==================== */
+  /* ==================== AUTH: Login (hybrid: cloud first → local fallback) ==================== */
   const loginUserWithPassword = useCallback(async (username, password) => {
     const passwordHash = await hashPassword(password)
 
-    // Fetch user by username
-    const { data: userRow, error } = await supabase
-      .from(USERS_TABLE)
-      .select('*')
-      .eq('username', username)
-      .maybeSingle()
+    // Strategy 1: Try Supabase cloud login
+    if (supabase) {
+      try {
+        const userRow = await cloudLoginUser(username, passwordHash)
+        if (userRow) {
+          // Cloud login success!
+          userIdRef.current = userRow.id
+          isCloudMode.current = true
+          saveSession(userRow.id, username, 'cloud')
 
-    if (error) throw new Error('登录失败，请检查网络')
-    if (!userRow) throw new Error('账号不存在，请先注册')
+          const cloudAppData = await fetchCloudData(userRow.id)
+          const cachedData = getLocalCache(userRow.id)
+          const appData = cloudAppData || cachedData
 
-    if (userRow.password_hash !== passwordHash) {
+          setData((d) => ({
+            ...(appData || initialData),
+            isLoggedIn: true,
+            currentUser: username,
+            user: {
+              name: userRow.display_name || username,
+              avatar: userRow.avatar || '🍊',
+              school: userRow.school || appData?.user?.school || '',
+              major: userRow.major || appData?.user?.major || '',
+              grade: userRow.grade || appData?.user?.grade || '',
+              motto: userRow.motto || appData?.user?.motto || '',
+            },
+            settings: d.settings || loadLocalSettings(),
+          }))
+          return true
+        }
+        // userRow = null means user not found in cloud → check local below
+      } catch (e) {
+        // Cloud error (network, table missing) → fall through to local
+        console.warn('Cloud login failed, trying local:', e.message)
+      }
+    }
+
+    // Strategy 2: Fallback to localStorage accounts
+    const accounts = loadAccounts()
+    const account = accounts[username]
+
+    if (!account) {
+      throw new Error('账号不存在或密码错误，请先注册')
+    }
+
+    if (account.passwordHash !== passwordHash) {
       throw new Error('密码错误，请重试')
     }
 
-    // Success — save session
-    userIdRef.current = userRow.id
-    saveSession(userRow.id, username)
+    // Local login success!
+    const localUserId = `local_${username}`
+    userIdRef.current = localUserId
+    isCloudMode.current = false
+    saveSession(localUserId, username, 'local')
 
-    // Load app data
-    const cloudAppData = await fetchCloudData(userRow.id)
-    const cachedData = getLocalCache(userRow.id)
-    const appData = cloudAppData || cachedData
+    // Load user's local data
+    const localAppData = loadUserData(username)
 
     setData((d) => ({
-      ...(appData || initialData),
+      ...(localAppData || initialData),
       isLoggedIn: true,
       currentUser: username,
       user: {
-        name: userRow.display_name || username,
-        avatar: userRow.avatar || '🍊',
-        school: userRow.school || appData?.user?.school || '',
-        major: userRow.major || appData?.user?.major || '',
-        grade: userRow.grade || appData?.user?.grade || '',
-        motto: userRow.motto || appData?.user?.motto || '',
+        name: account.name || username,
+        avatar: account.avatar || '🍊',
+        school: account.school || localAppData?.user?.school || '',
+        major: account.major || localAppData?.user?.major || '',
+        grade: account.grade || localAppData?.user?.grade || '',
+        motto: account.motto || localAppData?.user?.motto || '',
       },
       settings: d.settings || loadLocalSettings(),
     }))
-
     return true
   }, [pushToast])
 
@@ -393,27 +553,36 @@ export function StoreProvider({ children }) {
   const updateUser = useCallback(async (patch) => {
     const newUser = { ...data.user, ...patch }
 
-    // Update profile in cloud (wb_users table)
-    if (userIdRef.current) {
-      await supabase
-        .from(USERS_TABLE)
-        .update({
+    // Try updating in cloud
+    if (isCloudMode.current && userIdRef.current && supabase) {
+      try {
+        await supabase.from(USERS_TABLE).update({
           display_name: newUser.name,
           avatar: newUser.avatar,
           school: newUser.school,
           major: newUser.major,
           grade: newUser.grade,
           motto: newUser.motto,
-        })
-        .eq('id', userIdRef.current)
+        }).eq('id', userIdRef.current)
+      } catch (e) { /* silent fail */ }
+    }
+
+    // Always update locally
+    if (data.currentUser) {
+      const accounts = loadAccounts()
+      if (accounts[data.currentUser]) {
+        accounts[data.currentUser] = { ...accounts[data.currentUser], ...patch }
+        saveAccounts(accounts)
+      }
     }
 
     setData((d) => ({ ...d, user: newUser }))
     pushToast('资料已更新')
-  }, [pushToast, data.user])
+  }, [pushToast, data.user, data.currentUser])
 
   const logoutUser = useCallback(async () => {
     userIdRef.current = null
+    isCloudMode.current = false
     clearSession()
     setData((d) => ({
       ...initialData,
@@ -441,47 +610,63 @@ export function StoreProvider({ children }) {
   /* ==================== Export / Import ==================== */
   const exportAllData = useCallback(async () => {
     const session = loadSession()
-    if (!session?.userId) throw new Error('请先登录')
+    if (!session?.username) throw new Error('请先登录')
 
-    const cloudData = await fetchCloudData(session.userId)
+    let appData = null
+    if (session.mode === 'cloud' && session.userId) {
+      appData = await fetchCloudData(session.userId)
+    }
+    if (!appData) {
+      appData = loadUserData(session.username) || data
+    }
+
     const localSettings = loadLocalSettings()
 
     return {
       version: 1,
       exportedAt: new Date().toISOString(),
-      source: 'supabase-custom',
+      source: session.mode === 'cloud' ? 'supabase-custom' : 'local',
       userId: session.userId,
-      appData: cloudData || {},
+      username: session.username,
+      appData,
       settings: localSettings,
     }
-  }, [])
+  }, [data])
 
   const importAllData = useCallback(async (jsonObj, mode = 'merge') => {
     if (!jsonObj || jsonObj.version === undefined) throw new Error('无效的备份文件格式')
 
     const session = loadSession()
-    if (!session?.userId) throw new Error('请先登录')
+    if (!session?.username) throw new Error('请先登录')
 
     let mergedData
-    if (mode === 'overwrite' || !userIdRef.current) {
+    if (mode === 'overwrite') {
       mergedData = jsonObj.appData || {}
     } else {
-      const existing = await fetchCloudData(session.userId)
+      let existing = session.mode === 'cloud' && session.userId
+        ? await fetchCloudData(session.userId)
+        : null
+      if (!existing) existing = loadUserData(session.username)
       mergedData = { ...(existing || {}), ...(jsonObj.appData || {}) }
     }
 
-    await pushCloudData(session.userId, {
+    // Save imported data
+    if (session.mode === 'cloud' && session.userId) {
+      await pushCloudData(session.userId, { ...mergedData, isLoggedIn: true, currentUser: session.username })
+    }
+    saveUserData(session.username, mergedData)
+    if (session.userId) setLocalCache(session.userId, mergedData)
+
+    // Apply to state
+    setData((d) => ({
       ...mergedData,
       isLoggedIn: true,
-      currentUser: data.currentUser,
-    })
-
-    await loadUserDataFromSource(session.userId, session.username)
-    localStorage.setItem(LOCAL_CACHE_PREFIX + session.userId, JSON.stringify(mergedData))
+      currentUser: session.username,
+      settings: jsonObj.settings ? { ...loadLocalSettings(), ...jsonObj.settings } : (d.settings || loadLocalSettings()),
+    }))
 
     if (jsonObj.settings) {
       saveLocalSettings({ ...loadLocalSettings(), ...jsonObj.settings })
-      setData((d) => ({ ...d, settings: { ...(d.settings || {}), ...jsonObj.settings } }))
     }
 
     return 1
